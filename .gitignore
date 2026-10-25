@@ -48,3 +48,35 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Remaster build outputs and private runtime state
+**/bin/
+**/obj/
+.local/
+.data/
+data/
+artifacts/
+TestResults/
+**/*.secret
+**/*.pfx
+**/*.p12
+**/*.pem
+**/*.key
+**/instance.lock
+**/settings.json
+**/Settings.json
+**/SelectedGames.json
+**/OwnedGames.json
+**/SteamID.txt
+**/Health-*.json
+**/statistics-*.json
+**/events.json
+**/desktop.json
+**/webview/
+**/session-*.json
+**/session-*.secret*
+**/*.log
+**/playwright-report/
+.env
+.env.*
+!.env.example

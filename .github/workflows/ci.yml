@@ -1,0 +1,31 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet restore HourBoostr.Remastered.slnx --locked-mode
+      - run: dotnet build HourBoostr.Remastered.slnx -c Release --no-restore
+      - run: dotnet test HourBoostr.Remastered.slnx -c Release --no-build --logger trx
+      - run: dotnet list src/HourBoostr.Remastered/HourBoostr.Remastered.csproj package --vulnerable --include-transitive
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: "**/TestResults/*.trx"
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: docker build -t hourboostr-remastered:ci .

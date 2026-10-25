@@ -1,0 +1,33 @@
+name: Build release packages
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, for example 1.0.0-preview.1"
+        required: true
+        default: "1.0.0-preview.1"
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        runtime: [win-x64, linux-x64, linux-arm64]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Publish
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        shell: pwsh
+        run: ./scripts/publish.ps1 -Runtime '${{ matrix.runtime }}' -Version $env:RELEASE_VERSION
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: release-${{ matrix.runtime }}
+          path: artifacts/releases/*

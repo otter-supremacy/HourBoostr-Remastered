@@ -1,0 +1,12 @@
+# Linux host networking keeps the dashboard on the host's loopback interface.
+services:
+  hourboostr:
+    build: .
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - hourboostr-data:/data
+    environment:
+      HBR_PORT: "3241"
+volumes:
+  hourboostr-data:

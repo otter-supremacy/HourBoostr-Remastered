@@ -1,0 +1,15 @@
+.git
+legacy
+**/bin
+**/obj
+tests
+artifacts
+.local
+data
+**/*.secret
+**/*.pfx
+**/*.pem
+**/*.key
+**/settings.json
+**/statistics-*.json
+**/events.json

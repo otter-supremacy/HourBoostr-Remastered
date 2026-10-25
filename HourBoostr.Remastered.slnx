@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HourBoostr.Remastered/HourBoostr.Remastered.csproj" />
+    <Project Path="src/HourBoostr.Desktop/HourBoostr.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HourBoostr.Remastered.Tests/HourBoostr.Remastered.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,18 @@
+HourBoostr Remastered by Otter is a modified continuation of HourBoostr by Ezzpify.
+
+Remaster creator reference: https://steamcommunity.com/id/pornhub_sex5/
+Original project: https://github.com/Ezzpify/HourBoostr
+Original developer: Ezzpify. Upstream contributors: rpges and Kasp42.
+Remaster repository: https://github.com/otter-supremacy/HourBoostr-Remastered
+Upstream source and original documentation are retained under legacy/.
+
+The remaster adds modern Steam authentication, a local dashboard and CLI,
+account isolation, scheduling, statistics, diagnostics, release tooling,
+and automated tests. It is distributed under GPL version 3.
+
+SteamKit2 is a separate dependency licensed under LGPL-2.1.
+QRCoder is a separate dependency licensed under MIT.
+Microsoft .NET and Microsoft extensions have their own notices/licenses.
+Dependency license and notice files are included under docs/licenses/.
+Steam and Counter-Strike are Valve trademarks. This project is not
+affiliated with or endorsed by Valve, Steam, Oracle, or Ezzpify.
