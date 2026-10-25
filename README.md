@@ -1,5 +1,7 @@
 # HourBoostr Remastered by Otter
 
+[![Build and test](https://github.com/otter-supremacy/HourBoostr-Remastered/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/otter-supremacy/HourBoostr-Remastered/actions/workflows/ci.yml)
+
 A self-hosted **Steam hour booster / Steam idler** with modern sign-in, a local dashboard, Windows tray controls, and a command-line interface. **HourBoostr Remastered by Otter** is an independent continuation of [Ezzpify/HourBoostr](https://github.com/Ezzpify/HourBoostr), distributed under GPL-3.0. The original source and commit history are preserved.
 
 [Download preview](https://github.com/otter-supremacy/HourBoostr-Remastered/releases/tag/v1.0.0-preview.1) · [Complete tutorial](docs/TUTORIAL.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Credits](CREDITS.md) · [Otter on GitHub](https://github.com/otter-supremacy) · [Otter on Steam](https://steamcommunity.com/id/pornhub_sex5/)
@@ -19,7 +21,7 @@ A self-hosted **Steam hour booster / Steam idler** with modern sign-in, a local 
 | Linux ARM64 | [Linux ARM64 ZIP](https://github.com/otter-supremacy/HourBoostr-Remastered/releases/download/v1.0.0-preview.1/HourBoostr-Remastered-1.0.0-preview.1-linux-arm64.zip); use the Linux guide. Native ARM64 execution remains unverified |
 | Build / Docker | [Source build](docs/TUTORIAL.md#build-from-source) · [Docker](docs/TUTORIAL.md#docker-on-linux) |
 
-This is a **preview release**. Password/Guard sign-in, saved-session recovery, idling controls, and AFK delivery were tested on Windows. QR approval, playing-elsewhere overlap, simultaneous live accounts, and native Linux/ARM64/container execution still have verification gaps. See the [feature matrix](docs/FEATURE-MATRIX.md).
+This is a **preview release**. Password/Guard sign-in, saved-session recovery, idling controls, and AFK delivery were tested on Windows. QR approval, playing-elsewhere overlap, simultaneous live accounts, native Linux/ARM64 package execution, and live Steam use in Linux/containers still have verification gaps. Hosted Windows/Linux builds and tests, plus Linux container startup/API/persistence checks, passed. See the [feature matrix](docs/FEATURE-MATRIX.md).
 
 ## What changes from classic HourBoostr?
 

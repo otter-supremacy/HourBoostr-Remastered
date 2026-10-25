@@ -144,7 +144,7 @@ Use `HourBoostr.Remastered doctor --live` for connection diagnostics, or `doctor
 
 ## Linux and VPS
 
-The Linux packages build successfully, but native execution of this remaster, its user service, ARM64, and Docker still require platform verification. This guide describes the supplied installation path. The separately patched classic VPS app is not evidence that this new runtime has passed native Linux testing.
+The Linux packages build successfully. Hosted Linux builds/tests and container startup/API/data-persistence checks passed. Native Linux ZIP execution, the user service, ARM64 execution, and live Steam use on Linux still require verification. This guide describes the supplied installation path. The separately patched classic VPS app is not evidence that this new runtime has passed native Linux testing.
 
 ### Install and run
 
@@ -206,7 +206,7 @@ The service restarts failed processes. The app handles ordinary Steam reconnects
 
 ## Docker on Linux
 
-Docker runtime behavior remains unverified for this preview.
+Container build, dashboard startup, authenticated API access, and data persistence across container replacement passed in hosted Linux CI. Live Steam login/idling inside Docker remains unverified for this preview.
 
 1. Clone the repository and enter its directory.
 2. Run `docker compose up --build -d`. The supplied Compose file uses Linux host networking and a persistent named data volume.
