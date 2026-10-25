@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-dotnet@v6.0.0
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "10.0.402"
       - run: dotnet restore HourBoostr.Remastered.slnx --locked-mode
       - run: dotnet build HourBoostr.Remastered.slnx -c Release --no-restore
       - run: dotnet test HourBoostr.Remastered.slnx -c Release --no-build --logger trx
@@ -29,3 +29,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - run: docker build -t hourboostr-remastered:ci .
+      - run: python3 tests/container-smoke.py

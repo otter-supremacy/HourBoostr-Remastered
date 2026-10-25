@@ -5,6 +5,9 @@ COPY src/HourBoostr.Remastered/HourBoostr.Remastered.csproj src/HourBoostr.Remas
 RUN dotnet restore src/HourBoostr.Remastered/HourBoostr.Remastered.csproj
 COPY src/ src/
 COPY LICENSE NOTICE ./
+COPY *.md ./
+COPY docs/ docs/
+COPY scripts/ scripts/
 RUN dotnet publish src/HourBoostr.Remastered/HourBoostr.Remastered.csproj -c Release --no-restore -o /app
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 USER root
