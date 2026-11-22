@@ -9,6 +9,14 @@ try
     var options = LaunchOptions.Parse(args);
     var store = new DataStore(options.DataDirectory);
     var vault = new SecretVault(store);
+    if (args.FirstOrDefault() == "ai-key")
+    {
+        var key = args.Contains("--remove") ? "" : Console.ReadLine();
+        if (key is null || (!args.Contains("--remove") && string.IsNullOrWhiteSpace(key))) throw new ArgumentException("Supply a Groq key on standard input, or use --remove.");
+        AiReplyService.For(store).SaveKey(key);
+        Console.WriteLine(args.Contains("--remove") ? "Backend Groq key removed." : "Backend Groq key saved. No restart required.");
+        return 0;
+    }
     if (await Cli.ExecuteAsync(args, options, store, vault) is int code) return code;
     using var instance = new FileStream(store.Resolve("instance.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
     if (options.ProtectedNames.Length > 0) store.ProtectAccounts(options.ProtectedNames);
@@ -73,6 +81,14 @@ try
     }).RequireRateLimiting("signin");
     app.MapDelete("/api/session", (HttpContext context) => { context.Response.Cookies.Delete("hbr-session"); return Results.Ok(); });
     app.MapGet("/api/state", (SteamEngine engine, EventLog events) => new { version = ReleaseTools.CurrentVersion, startedAt = engine.StartedAt, now = DateTimeOffset.UtcNow, accounts = engine.Snapshot(), events = events.Entries().Take(30), remote = options.Remote });
+    app.MapGet("/api/ai/status", () => AiReplyService.For(store).Status());
+    app.MapPost("/api/ai/preview", async (AiPreviewRequest request, HttpContext context) =>
+    {
+        var account = store.Account(request.AccountId) ?? throw new KeyNotFoundException("Account not found.");
+        if (request.Message is null || request.Message.Length is < 1 or > 1000) throw new ArgumentException("Preview message must be 1–1000 characters.");
+        var reply = await AiReplyService.For(store).GenerateAsync(account.Id, account.AiReplies, "preview", request.Message, context.RequestAborted);
+        return Results.Ok(new { reply, details = AiReplyService.For(store).Status() });
+    }).RequireRateLimiting("signin");
     app.MapPost("/api/shutdown", (IHostApplicationLifetime lifetime) =>
     {
         _ = Task.Run(async () => { await Task.Delay(200); lifetime.StopApplication(); });
@@ -80,10 +96,39 @@ try
     });
     app.MapPost("/api/accounts", (CreateAccountRequest request) => Results.Ok(store.Add(request.Label)));
     app.MapGet("/api/accounts/{id}/settings", (string id) => Results.Ok(store.Account(id) ?? throw new KeyNotFoundException("Account not found.")));
+    app.MapGet("/api/accounts/{id}/profile-comments", (string id, SteamEngine engine) =>
+        Results.Ok(engine.RegularsSession(id).ReadProfileComments()));
+    app.MapPut("/api/accounts/{id}/profile-comments", (string id, SteamEngine engine, ProfileCommentSettings request) =>
+    {
+        engine.RegularsSession(id).ConfigureProfileComments(request.Enabled);
+        return Results.NoContent();
+    });
+    app.MapPost("/api/accounts/{id}/profile-comments", (string id, SteamEngine engine, ProfileCommentDismissal request) =>
+    {
+        if (!ulong.TryParse(request.Id, out var commentId) || commentId == 0) throw new ArgumentException("Invalid comment ID.");
+        engine.RegularsSession(id).DismissProfileComment(request.Id);
+        return Results.NoContent();
+    });
+    app.MapGet("/api/accounts/{id}/group-regulars", async (string id, SteamEngine engine, CancellationToken token) =>
+        Results.Ok(await engine.RegularsSession(id).ReadRegularsAsync(token)));
+    app.MapPut("/api/accounts/{id}/group-regulars", (string id, SteamEngine engine, RegularSettings request) =>
+    {
+        engine.RegularsSession(id).ConfigureRegulars(request);
+        return Results.NoContent();
+    });
+    app.MapPost("/api/accounts/{id}/group-regulars", (string id, SteamEngine engine, RegularAction request) =>
+    {
+        engine.RegularsSession(id).ActOnRegular(request);
+        return Results.NoContent();
+    });
     app.MapPut("/api/accounts/{id}/settings", (string id, AccountSettings request) =>
     {
         var current = store.Account(id) ?? throw new KeyNotFoundException("Account not found.");
-        request.Id = id; request.LoginName = current.LoginName; store.Save(request); return Results.Ok(store.Account(id));
+        request.Id = id; request.LoginName = current.LoginName; request.Validate();
+        var display = request.ProfileDisplay; var previous = current.ProfileDisplay;
+        display.AnchorUtc = display.Mode != previous.Mode || display.IntervalMinutes != previous.IntervalMinutes || display.CustomText != previous.CustomText || !display.AppIds.SequenceEqual(previous.AppIds)
+            ? DateTimeOffset.UtcNow : previous.AnchorUtc;
+        store.Save(request); return Results.Ok(store.Account(id));
     });
     app.MapPost("/api/accounts/{id}/login", async (string id, LoginRequest request, SteamEngine engine) => { await engine.LoginAsync(id, request); return Results.Accepted(); }).RequireRateLimiting("signin");
     app.MapPost("/api/accounts/{id}/guard", (string id, GuardRequest request, SteamEngine engine) => engine.SubmitGuard(id, request.Code) ? Results.Ok() : Results.BadRequest(new { error = "There is no pending Steam Guard prompt." })).RequireRateLimiting("signin");

@@ -30,6 +30,7 @@ public sealed class AccountSettings
     public bool Paused { get; set; }
     public string Presence { get; set; } = "online";
     public uint? PreferredAppId { get; set; }
+    public ProfileDisplaySettings ProfileDisplay { get; set; } = new();
     public List<uint> SelectedAppIds { get; set; } = [];
     public List<uint> ExcludedAppIds { get; set; } = [];
     public int RandomCount { get; set; } = 10;
@@ -37,8 +38,12 @@ public sealed class AccountSettings
     public string SelectionMode { get; set; } = "manual";
     public bool PauseWhilePlaying { get; set; } = true;
     public bool AutoAcceptFriendRequests { get; set; }
+    public bool FriendWelcomeEnabled { get; set; }
+    public string FriendWelcomeMessage { get; set; } = "Thanks for adding me! I am AFK right now and will respond later.";
     public ScheduleSettings Schedule { get; set; } = new();
     public AfkSettings Afk { get; set; } = new();
+    public GroupReplySettings GroupReplies { get; set; } = new();
+    public AiReplySettings AiReplies { get; set; } = new();
     public Dictionary<uint, double> TargetHours { get; set; } = [];
 
     public void Validate()
@@ -46,6 +51,7 @@ public sealed class AccountSettings
         if (Label is null || LoginName is null || Schedule is null || Afk is null || SelectedAppIds is null || ExcludedAppIds is null || TargetHours is null) throw new ArgumentException("Account settings are incomplete.");
         if (!Guid.TryParseExact(Id, "N", out _)) throw new ArgumentException("Invalid account ID.");
         Label = Label.Trim(); LoginName = LoginName.Trim();
+        if (FriendWelcomeMessage is null || FriendWelcomeMessage.Length > 500 || (FriendWelcomeEnabled && string.IsNullOrWhiteSpace(FriendWelcomeMessage))) throw new ArgumentException("Friend welcome message must be 1–500 characters when enabled.");
         if (Label.Length is < 1 or > 80) throw new ArgumentException("Account label must be 1–80 characters.");
         if (LoginName.Length > 100) throw new ArgumentException("Login name is too long.");
         if (Presence is not ("online" or "away" or "invisible")) throw new ArgumentException("Choose online, away, or invisible.");
@@ -57,6 +63,12 @@ public sealed class AccountSettings
         ExcludedAppIds = ExcludedAppIds.Where(x => x > 0).Distinct().ToList();
         if (TargetHours.Any(x => !double.IsFinite(x.Value) || x.Value <= 0 || x.Value > 1000000)) throw new ArgumentException("Hour targets must be positive finite numbers.");
         Schedule.Validate(); Afk.Validate();
+        if (GroupReplies is null) throw new ArgumentException("Group reply settings are incomplete.");
+        GroupReplies.Validate();
+        if (ProfileDisplay is null) throw new ArgumentException("Profile display settings are incomplete.");
+        ProfileDisplay.Validate();
+        if (AiReplies is null) throw new ArgumentException("AI reply settings are incomplete.");
+        AiReplies.Validate();
     }
 }
 
@@ -74,6 +86,52 @@ public sealed class ScheduleSettings
         try { _ = TimeZoneInfo.FindSystemTimeZoneById(TimeZone); }
         catch (Exception e) when (e is TimeZoneNotFoundException or InvalidTimeZoneException) { throw new ArgumentException("Unknown schedule time zone."); }
         if (Days.Any(x => !Enum.IsDefined(x))) throw new ArgumentException("Invalid day.");
+    }
+}
+
+public sealed class ProfileDisplaySettings
+{
+    public string Mode { get; set; } = "default";
+    public List<uint> AppIds { get; set; } = [];
+    public string CustomText { get; set; } = "";
+    public int IntervalMinutes { get; set; } = 60;
+    public DateTimeOffset? AnchorUtc { get; set; }
+    public void Validate()
+    {
+        if (Mode is not ("default" or "rotate" or "custom" or "mixed") || AppIds is null || CustomText is null) throw new ArgumentException("Invalid profile display settings.");
+        AppIds = AppIds.Where(x => x > 0).Distinct().ToList();
+        if (AppIds.Count > 100 || IntervalMinutes is < 5 or > 10080) throw new ArgumentException("Choose up to 100 display games and an interval of 5–10080 minutes.");
+        if (CustomText.Length > 80 || System.Text.Encoding.UTF8.GetByteCount(CustomText) > 128 || CustomText.Any(char.IsControl)) throw new ArgumentException("Custom display must be a single line, up to 80 characters / 128 UTF-8 bytes.");
+        if (Mode is "custom" or "mixed" && string.IsNullOrWhiteSpace(CustomText)) throw new ArgumentException("Enter custom display text.");
+        if (Mode is "rotate" or "mixed" && AppIds.Count == 0) throw new ArgumentException("Choose games for the profile rotation.");
+    }
+}
+
+public sealed class AiReplySettings
+{
+    public bool PrivateMessages { get; set; }
+    public bool Groups { get; set; }
+    public string Instructions { get; set; } = "Use casual, friendly language. Keep replies to one or two short sentences. Say you are an automated assistant replying while the account owner is away. Do not invent facts about the owner.";
+    public int DailyLimit { get; set; } = 100;
+    public int CooldownSeconds { get; set; } = 15;
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Instructions) || Instructions.Length > 2000) throw new ArgumentException("AI instructions must be 1–2000 characters.");
+        if (DailyLimit is < 1 or > 500) throw new ArgumentException("AI daily limit must be 1–500 requests per account.");
+        if (CooldownSeconds is < 2 or > 3600) throw new ArgumentException("AI cooldown must be 2–3600 seconds.");
+    }
+}
+
+public sealed class GroupReplySettings
+{
+    public bool Enabled { get; set; }
+    public List<string> Messages { get; set; } = ["", "", ""];
+    public int CooldownSeconds { get; set; } = 5;
+    public void Validate()
+    {
+        if (Messages is null || Messages.Count != 3 || Messages.Any(x => x is null || x.Length > 500 || (Enabled && string.IsNullOrWhiteSpace(x))))
+            throw new ArgumentException("Enter three group replies of 1–500 characters before enabling.");
+        if (CooldownSeconds is < 1 or > 3600) throw new ArgumentException("Group reply cooldown must be 1–3600 seconds.");
     }
 }
 
@@ -98,6 +156,7 @@ public sealed class LibraryGame
     public uint AppId { get; set; }
     public string Name { get; set; } = "";
     public uint SteamMinutes { get; set; }
+    public bool SteamHoursReported { get; set; } = true;
     public double EstimatedTotalSeconds { get; set; }
     public double IdleSeconds { get; set; }
 }
@@ -142,6 +201,14 @@ public sealed class AccountView
     public double SessionSeconds { get; set; }
     public double TotalIdleSeconds { get; set; }
     public int Reconnects { get; set; }
+    public int ConsecutiveProbeFailures { get; set; }
+    public DateTimeOffset? ConnectedSince { get; set; }
+    public DateTimeOffset? LastDisconnectAt { get; set; }
+    public string? LastDisconnectReason { get; set; }
+    public DateTimeOffset? NextReconnectAt { get; set; }
+    public string? RequestedProfileDisplay { get; set; }
+    public string? FriendObservedGame { get; set; }
+    public DateTimeOffset? NextProfileDisplayChange { get; set; }
     public string? AuthPrompt { get; set; }
     public string? QrSvg { get; set; }
 }

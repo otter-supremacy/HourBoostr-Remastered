@@ -70,6 +70,10 @@ TestResults/
 **/SteamID.txt
 **/Health-*.json
 **/statistics-*.json
+**/friend-welcomes-*.json
+**/group-regulars-*.json
+**/profile-comments-*.json
+**/ai-usage.json
 **/events.json
 **/desktop.json
 **/webview/

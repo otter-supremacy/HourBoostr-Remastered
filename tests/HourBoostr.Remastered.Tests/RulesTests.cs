@@ -73,7 +73,8 @@ public sealed class RulesTests
         var now = DateTimeOffset.UtcNow;
         Assert.False(HealthRule.NeedsRecovery(new() { LoggedIn = true, PlayingElsewhere = true, LastSteamResponse = now.AddMinutes(-5) }, now));
         Assert.False(HealthRule.NeedsRecovery(new() { LoggedIn = false, State = "auth_required", LastSteamResponse = now.AddHours(-1) }, now));
-        Assert.True(HealthRule.NeedsRecovery(new() { LoggedIn = true, LastSteamResponse = now.AddMinutes(-13) }, now));
+        Assert.True(HealthRule.NeedsRecovery(new() { LoggedIn = true, ConsecutiveProbeFailures = 3, LastSteamResponse = now.AddMinutes(-13) }, now));
+        Assert.False(HealthRule.NeedsRecovery(new() { LoggedIn = true, Connected = true, ConsecutiveProbeFailures = 20, LastSteamResponse = now.AddHours(-1) }, now));
     }
     [Theory]
     [InlineData("1.1.0", "1.0.9", true)]

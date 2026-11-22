@@ -8,9 +8,15 @@ public sealed class SteamEngine(DataStore store, SecretVault vault, EventLog eve
     private readonly SemaphoreSlim changes = new(1, 1);
     public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
     private readonly string[] protectedAccounts = protectedNames.ToArray();
-    public AccountView[] Snapshot() => store.Settings.Accounts.Select(config =>
-        sessions.TryGetValue(config.Id, out var session) ? session.Snapshot() : new AccountView
-        { Id = config.Id, Label = config.Label, State = "signed_out", HasSavedSession = vault.Get(config.Id) is not null }).ToArray();
+    public AccountView[] Snapshot()
+    {
+        var views = store.Settings.Accounts.Select(config => sessions.TryGetValue(config.Id, out var session) ? session.Snapshot() : new AccountView
+            { Id = config.Id, Label = config.Label, State = "signed_out", HasSavedSession = vault.Get(config.Id) is not null }).ToArray();
+        foreach (var view in views)
+            if (ulong.TryParse(view.SteamId, out var steamId))
+                view.FriendObservedGame = sessions.Where(x => x.Key != view.Id).Select(x => x.Value.ObserveFriendGame(steamId)).FirstOrDefault(x => x is not null);
+        return views;
+    }
     public AccountStatistics Statistics(string id) => sessions.TryGetValue(id, out var session) ? session.Statistics() : store.Read<AccountStatistics>($"statistics-{id}.json") ?? new();
     public async Task LoginAsync(string id, LoginRequest request)
     {
@@ -38,6 +44,8 @@ public sealed class SteamEngine(DataStore store, SecretVault vault, EventLog eve
         finally { changes.Release(); }
     }
     public bool SubmitGuard(string id, string code) => sessions.TryGetValue(id, out var session) && session.SubmitGuard(code);
+    public SteamSession RegularsSession(string id) => sessions.TryGetValue(id, out var session)
+        ? session : throw new ArgumentException("Connect this Steam account to use Group Regulars.");
     public Task RefreshAsync(string id) => sessions.TryGetValue(id, out var session) ? session.RefreshLibraryAsync() : Task.CompletedTask;
     public void Reselect(string id) { if (sessions.TryGetValue(id, out var session)) session.Reselect(); }
     public async Task ForgetAsync(string id)

@@ -63,5 +63,12 @@ public sealed class ReplyGate
 public static class HealthRule
 {
     public static bool NeedsRecovery(AccountView view, DateTimeOffset now)
-        => view.LoggedIn && view.LastSteamResponse is { } response && now - response > TimeSpan.FromMinutes(12);
+        // A failed unified-service query does not prove the CM connection died.
+        // SteamKit owns CM heartbeats; retain recovery for inconsistent workers.
+        => view.LoggedIn && !view.Connected && view.ConsecutiveProbeFailures >= 3 && view.LastSteamResponse is { } response && now - response > TimeSpan.FromMinutes(12);
+}
+
+public static class ReconnectPolicy
+{
+    public static int DelaySeconds(int failures) => Math.Min(160, 5 * (1 << Math.Clamp(failures, 1, 5)));
 }

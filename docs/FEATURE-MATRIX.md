@@ -16,6 +16,9 @@ This matrix distinguishes implementation from evidence gathered on the current W
 | Windows desktop and tray | Embedded dashboard; tray icon; sign-in startup directly in tray; minimize/close-to-tray | Startup toggle, tray-only launch, minimize/restore, and three clean open/exit cycles checked; actual Windows sign-out/reboot remains unverified |
 | Incoming friend requests | Opt-in per account; only individual incoming requests; spacing and duplicate retry limits | 34 unit tests include seven friend-request cases; per-account API persistence/isolation passed; completed live acceptance still requires a real incoming request |
 | AFK replies | Private friends only; cooldown, quiet hours, exclusions, echo suppression | User confirmed an actual configured reply arrived |
+| Group replies and friend welcomes | Three rotating group templates, separate cooldowns, and optional messages after incoming friend-request acceptance | Unit tests cover rotation, cooldowns and welcome deduplication |
+| Group Regulars | Suggestions require activity on separate days and explicit opt-in. Each outgoing request requires approval | Unit tests cover eligibility, restart deduplication and daily request limits |
+| Profile comment inbox | Polls new comments, filters links, classifies eligible text and offers copy plus a Steam profile link | Unit tests cover link filtering, duplicates and uncertain moderation results. Posting takes place manually in Steam |
 | Schedules and targets | Time-zone/DST-aware windows and estimated-hour targets | Live schedule pause and target exclusion passed; overnight/DST tests passed |
 | Statistics | Persistent per-game estimates and separate Steam-reported minutes | Counters advanced in live idling test; persistence covered by storage tests |
 | Multiple accounts | Separate workers, vault files, settings and statistics | Isolation API/storage tests passed; simultaneous multiple live accounts not yet tested |
