@@ -4,7 +4,7 @@
 
 A self-hosted **Steam hour booster / Steam idler** with modern sign-in, a local dashboard, Windows tray controls, and a command-line interface. **HourBoostr Remastered by Otter** is an independent continuation of [Ezzpify/HourBoostr](https://github.com/Ezzpify/HourBoostr), distributed under GPL-3.0. The original source and commit history are preserved.
 
-[Download preview](https://github.com/otter-supremacy/HourBoostr-Remastered/releases/tag/v1.0.0-preview.1) · [Complete tutorial](docs/TUTORIAL.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Credits](CREDITS.md) · [Otter on GitHub](https://github.com/otter-supremacy) · [Otter on Steam](https://steamcommunity.com/id/pornhub_sex5/)
+[Project website](https://otter-supremacy.github.io/HourBoostr-Remastered/) · [Download preview](https://github.com/otter-supremacy/HourBoostr-Remastered/releases/tag/v1.0.0-preview.1) · [Complete tutorial](docs/TUTORIAL.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Credits](CREDITS.md) · [Otter on GitHub](https://github.com/otter-supremacy) · [Otter on Steam](https://steamcommunity.com/id/pornhub_sex5/)
 
 **Looking for the older HourBoostr?** This project continues the Steam-client-style HourBoostr approach with a new .NET 10 application. The preserved [original README](legacy/README.md) describes HourBoostr and SingleBoostr. The remaster does not implement SingleBoostr's trading-card farming.
 
