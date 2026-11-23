@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace HourBoostr.Remastered;
 
 public static class AutomaticReplyDelay
@@ -8,7 +10,14 @@ public static class AutomaticReplyDelay
     {
         token.ThrowIfCancellationRequested();
         if (!canSend()) return false;
-        await Task.Delay(TimeSpan.FromSeconds(Seconds), token);
+        var minimumDelay = TimeSpan.FromSeconds(Seconds);
+        var started = Stopwatch.GetTimestamp();
+        var remaining = minimumDelay;
+        do
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Ceiling(remaining.TotalMilliseconds)), token);
+            remaining = minimumDelay - Stopwatch.GetElapsedTime(started);
+        } while (remaining > TimeSpan.Zero);
         token.ThrowIfCancellationRequested();
         if (!canSend()) return false;
         await send();
