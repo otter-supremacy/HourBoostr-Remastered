@@ -5,6 +5,21 @@ namespace HourBoostr.Remastered.Tests;
 
 public sealed class ProfileDisplayTests
 {
+    [Theory]
+    [InlineData("normal", 0)]
+    [InlineData("play-together", 8)]
+    [InlineData("mobile", 512)]
+    [InlineData("big-picture", 1024)]
+    [InlineData("vr", 2048)]
+    public void AppearanceSendsOnlyTheSelectedBadge(string badge, int flag)
+    {
+        var packet = SteamAppearance.Packet("away", badge);
+        Assert.Equal(EMsg.ClientChangeStatus, packet.MsgType);
+        Assert.Equal((uint)EPersonaState.Away, packet.Body.persona_state);
+        Assert.Equal((uint)flag, packet.Body.persona_state_flags);
+        Assert.Equal(0u, SteamAppearance.Packet("invisible", badge).Body.persona_state_flags);
+    }
+
     private readonly DateTimeOffset start = DateTimeOffset.Parse("2026-10-31T10:00:00Z");
     private static Dictionary<uint, LibraryGame> Library() => Enumerable.Range(1,32).Select(i => (uint)i).Append(570u).ToDictionary(i => i, i => new LibraryGame { AppId = i, Name = "Game " + i });
     private static List<uint> Chosen() => Enumerable.Range(1,32).Select(i => (uint)i).ToList();

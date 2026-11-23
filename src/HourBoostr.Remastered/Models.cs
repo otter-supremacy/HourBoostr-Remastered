@@ -29,6 +29,7 @@ public sealed class AccountSettings
     public bool Enabled { get; set; } = true;
     public bool Paused { get; set; }
     public string Presence { get; set; } = "online";
+    public string? PresenceBadge { get; set; }
     public uint? PreferredAppId { get; set; }
     public ProfileDisplaySettings ProfileDisplay { get; set; } = new();
     public List<uint> SelectedAppIds { get; set; } = [];
@@ -54,7 +55,8 @@ public sealed class AccountSettings
         if (FriendWelcomeMessage is null || FriendWelcomeMessage.Length > 500 || (FriendWelcomeEnabled && string.IsNullOrWhiteSpace(FriendWelcomeMessage))) throw new ArgumentException("Friend welcome message must be 1–500 characters when enabled.");
         if (Label.Length is < 1 or > 80) throw new ArgumentException("Account label must be 1–80 characters.");
         if (LoginName.Length > 100) throw new ArgumentException("Login name is too long.");
-        if (Presence is not ("online" or "away" or "invisible")) throw new ArgumentException("Choose online, away, or invisible.");
+        if (!SteamAppearance.IsPresence(Presence)) throw new ArgumentException("Choose online, busy, away, or invisible.");
+        if (PresenceBadge is not null && !SteamAppearance.IsBadge(PresenceBadge)) throw new ArgumentException("Choose a supported Steam display badge.");
         if (SelectionMode is not ("manual" or "random" or "rotate")) throw new ArgumentException("Unknown selection mode.");
         if (RandomCount is < 1 or > 32) throw new ArgumentException("Game count must be between 1 and 32.");
         if (RotationMinutes is < 5 or > 10080) throw new ArgumentException("Rotation must be between 5 minutes and 7 days.");

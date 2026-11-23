@@ -71,7 +71,7 @@ public sealed class SteamSession : IAsyncDisposable
     private DateTimeOffset nextPresence = DateTimeOffset.MinValue;
     private DateTimeOffset lastRotation = DateTimeOffset.UtcNow;
     private DateTimeOffset nextReassert = DateTimeOffset.MinValue;
-    private string? lastPresence;
+    private (string Status, string Badge)? lastPresence;
     private string? lastCustomDisplay;
     private List<uint> chosen = [];
     public DateTimeOffset LastPumpUtc { get; private set; } = DateTimeOffset.UtcNow;
@@ -105,7 +105,11 @@ public sealed class SteamSession : IAsyncDisposable
         {
             if (callback.Result != EResult.OK) { disconnectReason = callback.Result.ToString(); if (callback.Result == EResult.RateLimitExceeded) retryNotBefore = DateTimeOffset.UtcNow.AddMinutes(5); events.Add("warning", id, "Steam logged off: " + callback.Result); lock (gate) view.LoggedIn = false; client.Disconnect(); }
         });
-        callbacks.Subscribe<SteamUser.AccountInfoCallback>(_ => { accountInfoReady = true; ApplyPresence(); });
+        callbacks.Subscribe<SteamUser.AccountInfoCallback>(_ =>
+        {
+            lock (gate) accountInfoReady = true;
+            ApplyPresence(store.Account(id));
+        });
         callbacks.Subscribe<SteamUser.PlayingSessionStateCallback>(callback => { lock (gate) view.PlayingElsewhere = callback.PlayingBlocked; });
         callbacks.SubscribeServiceNotification<FriendMessagesClient, CFriendMessages_IncomingMessage_Notification>(notification => _ = ReplyAsync(notification.Body.steamid_friend, notification.Body.chat_entry_type, notification.Body.local_echo, notification.Body.message));
         callbacks.Subscribe<SteamFriends.FriendMsgCallback>(message => _ = ReplyAsync(message.Sender.ConvertToUInt64(), (int)message.EntryType, false, message.Message ?? ""));
@@ -175,7 +179,8 @@ public sealed class SteamSession : IAsyncDisposable
     {
         if (disposed || stop.IsCancellationRequested || needsAuth) return;
         if (DateTimeOffset.UtcNow < retryNotBefore) { reconnectAt = retryNotBefore; return; }
-        reconnectAt = DateTimeOffset.MaxValue; accountInfoReady = false; lastPresence = null; lastCustomDisplay = null; nextReassert = DateTimeOffset.MinValue;
+        reconnectAt = DateTimeOffset.MaxValue; lastCustomDisplay = null; nextReassert = DateTimeOffset.MinValue;
+        lock (gate) { accountInfoReady = false; lastPresence = null; }
         Change("connecting", "Connecting to Steam…"); client.Connect();
     }
     private async Task ConnectedAsync()
@@ -298,14 +303,16 @@ public sealed class SteamSession : IAsyncDisposable
         disconnectReason = "transport_interrupted";
         Change("reconnecting", $"Connection lost. Retrying in {delay} seconds."); events.Add("warning", id, $"Steam disconnected; retry in {delay}s, failure streak {retryFailures}, initiated={callback.UserInitiated}.");
     }
-    private void ApplyPresence()
+    private void ApplyPresence(AccountSettings? config)
     {
-        if (!accountInfoReady || !view.LoggedIn) return;
-        var presence = store.Account(id)?.Presence ?? "online";
-        if (lastPresence == presence) return;
-        friends.SetPersonaState(presence switch { "away" => EPersonaState.Away, "invisible" => EPersonaState.Invisible, _ => EPersonaState.Online });
-        lastPresence = presence;
-        lock (gate) view.PersonaName = friends.GetPersonaName();
+        var presence = (Status: config?.Presence ?? "online", Badge: config?.PresenceBadge ?? "normal");
+        lock (gate)
+        {
+            if (!accountInfoReady || !view.LoggedIn || lastPresence == presence) return;
+            client.Send(SteamAppearance.Packet(presence.Status, presence.Badge));
+            lastPresence = presence;
+            view.PersonaName = friends.GetPersonaName();
+        }
     }
     public async Task RefreshLibraryAsync()
     {
@@ -384,7 +391,7 @@ public sealed class SteamSession : IAsyncDisposable
             _ = CheckProfileCommentsAsync(steamId.ConvertToUInt64(), config.AiReplies.DailyLimit);
         }
         AcceptIncomingFriendRequests(config, now);
-        ApplyPresence();
+        ApplyPresence(config);
         var allowed = config.Enabled && !config.Paused && ScheduleRule.Allows(config.Schedule, now) && !view.PlayingElsewhere;
         lock (gate)
         {

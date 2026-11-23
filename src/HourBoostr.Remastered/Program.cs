@@ -124,7 +124,9 @@ try
     app.MapPut("/api/accounts/{id}/settings", (string id, AccountSettings request) =>
     {
         var current = store.Account(id) ?? throw new KeyNotFoundException("Account not found.");
-        request.Id = id; request.LoginName = current.LoginName; request.Validate();
+        request.Id = id; request.LoginName = current.LoginName;
+        request.PresenceBadge ??= current.PresenceBadge;
+        request.Validate();
         var display = request.ProfileDisplay; var previous = current.ProfileDisplay;
         display.AnchorUtc = display.Mode != previous.Mode || display.IntervalMinutes != previous.IntervalMinutes || display.CustomText != previous.CustomText || !display.AppIds.SequenceEqual(previous.AppIds)
             ? DateTimeOffset.UtcNow : previous.AnchorUtc;

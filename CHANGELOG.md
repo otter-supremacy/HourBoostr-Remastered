@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add Steam Friends status and display badges to **Settings → Appearance**, with a shortcut to the custom status editor.
+- Link the project website, browser demo, and public guides for setup, Steam Guard, playtime, and custom status.
+
 ## 1.0.0-preview.1 — 2026-10-26
 
 - Added a .NET 10 application alongside the preserved upstream source.

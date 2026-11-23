@@ -38,6 +38,10 @@ try:
     key = docker("exec", container, "dotnet", "HourBoostr.Remastered.dll", "dashboard-key")
     created = request("/api/accounts", key, "POST", {"label": "CI persistence example"})
     assert created["label"] == "CI persistence example"
+    settings_path = f"/api/accounts/{created['id']}/settings"
+    config = request(settings_path, key)
+    config.update(presence="away", presenceBadge="mobile")
+    assert request(settings_path, key, "PUT", config)["presenceBadge"] == "mobile"
     docker("stop", container)
     docker("rm", container)
     start()
@@ -45,7 +49,9 @@ try:
     assert key_after == key
     accounts = request("/api/state", key_after)["accounts"]
     assert any(a["id"] == created["id"] and not a["loggedIn"] for a in accounts)
-    print("PASS Linux container readiness, authenticated API, persistent pairing key and profile after container replacement. No Steam login attempted.")
+    saved = request(settings_path, key_after)
+    assert saved["presence"] == "away" and saved["presenceBadge"] == "mobile"
+    print("PASS Linux container readiness, authenticated API, pairing key, profile and appearance after container replacement. No Steam login attempted.")
 finally:
     subprocess.run(["docker", "rm", "-f", container], check=False, stdout=subprocess.DEVNULL)
     subprocess.run(["docker", "volume", "rm", volume], check=False, stdout=subprocess.DEVNULL)

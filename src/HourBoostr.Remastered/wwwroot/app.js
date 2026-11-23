@@ -258,7 +258,7 @@ async function render() {
       2,
     );
   }
-  if (ui.tab === "settings") { renderSettings(); window.chrome?.webview?.postMessage({action: "desktop-state"}); }
+  if (ui.tab === "settings") { renderSettings(); updateAppearancePreview(); window.chrome?.webview?.postMessage({action: "desktop-state"}); }
   updateLive();
 }
 function renderOverview() {
@@ -520,13 +520,49 @@ if (window.chrome?.webview) {
     }
   });
 }
+const presenceBadges = {
+  normal: "Normal", "play-together": "Play Together", mobile: "Mobile",
+  "big-picture": "Big Picture", vr: "VR",
+};
+const presenceStates = { online: "Online", busy: "Do Not Disturb", away: "Away", invisible: "Invisible" };
+
+function renderAppearance(config) {
+  const badges = Object.entries(presenceBadges).map(([value, label]) => option(value, label, config.presenceBadge ?? "normal")).join("");
+  const statuses = Object.entries(presenceStates).map(([value, label]) => option(value, label, config.presence)).join("");
+  const profile = config.profileDisplay;
+  const activeText = ["custom", "mixed"].includes(profile?.mode) && profile.customText;
+  return `<div class="stack"><div><h3>Appearance</h3><p class="hint">Choose how this account appears in Steam Friends.</p></div>
+    <div class="field-row">
+      ${field('<label for="persona-state">Friends status</label>', `<select id="persona-state" name="presence">${statuses}</select>`)}
+      ${field('<label for="presence-badge">Display badge</label>', `<select id="presence-badge" name="presence-badge">${badges}</select>`)}
+    </div>
+    <div class="callout">
+      <strong>Appearance preview</strong>
+      <p id="appearance-preview" aria-live="polite"></p>
+      ${activeText ? `<p><strong>${profile.mode === "mixed" ? "Custom text in rotation" : "Custom status"}</strong> · ${escapeHtml(profile.customText)}</p>` : ""}
+      <button type="button" class="button" data-action="edit-custom-status">Edit custom status</button>
+    </div>
+    <p class="hint">Steam decides which badge friends see. Choosing a badge does not start a Remote Play session or change your games.</p>
+  </div>`;
+}
+
+function updateAppearancePreview() {
+  const preview = $("#appearance-preview");
+  if (!preview) return;
+  const status = $("#persona-state").value;
+  const badge = $("#presence-badge").value;
+  preview.textContent = status === "invisible"
+    ? "Appears offline. Your badge stays saved."
+    : presenceStates[status] + (badge === "normal" ? "" : " · " + presenceBadges[badge]);
+}
+
 function renderSettings() {
   $("#main").innerHTML =
     heading(
       "Your installation, your choices.",
       "Manage account settings, releases, and local access.",
     ) +
-    `<div class="stack"><section class="panel form-panel"><div class="panel-title"><div><h2>Account settings</h2><p>Session credentials are stored separately from ordinary configuration.</p></div></div>${ui.config ? `<form id="account-form">${field('<label for="account-label">Account label</label>', `<input id="account-label" name="label" maxlength="80" required value="${escapeHtml(ui.config.label)}">`)}${field('<label for="persona-state">Friends status</label>', `<select id="persona-state" name="presence">${option("online", "Online", ui.config.presence)}${option("away", "Away", ui.config.presence)}${option("invisible", "Invisible", ui.config.presence)}</select>`)}<label class="check-label"><input name="enabled" type="checkbox" ${ui.config.enabled ? "checked" : ""}>Enable this account</label><label class="check-label"><input name="auto-accept-friends" type="checkbox" ${ui.config.autoAcceptFriendRequests ? "checked" : ""}>Automatically accept incoming friend requests</label><p class="hint">Accept pending and new requests from individual Steam accounts. Idling always respects Steam’s playing-elsewhere lock.</p><label class="check-label"><input name="friend-welcome-enabled" type="checkbox" ${ui.config.friendWelcomeEnabled ? "checked" : ""}>Send a welcome message after automatic acceptance</label>${field('<label for="friend-welcome-message">Friend welcome message</label>', `<textarea id="friend-welcome-message" name="friend-welcome-message" maxlength="500" rows="3">${escapeHtml(ui.config.friendWelcomeMessage ?? "Thanks for adding me! I am AFK right now and will respond later.")}</textarea>`, "Requires automatic friend acceptance. Waits three seconds, then sends once per Steam friend after successful acceptance. Existing friends are not messaged. Delivery failures are logged without automatic retries.")}<div class="form-actions"><button class="button primary" type="submit">Save account</button>${button("Forget saved session", "forget")}${button("Remove account", "remove", false, 'data-tone="danger"')}</div></form>` : '<p class="muted">Add an account to configure its settings.</p>'}</section><section class="panel form-panel"><div class="panel-title"><div><h2>Releases and updates</h2><p>Current version: ${escapeHtml(ui.data.version)}</p></div></div><form id="release-form">${field('<label for="release-repo">Remaster release repository</label>', '<input id="release-repo" name="repository" placeholder="owner/HourBoostr-Remastered">', "Set this after the remaster is published. Updates are checked only when you ask.")}<div class="button-row"><button class="button" type="submit">Save release source</button>${button("Check for updates", "check-updates")}</div></form><p id="update-result" class="callout" role="status">No update check has run.</p><p class="hint">The CLI verifies SHA-256 checksums before staging an update. Apply and rollback operate on stopped, managed release directories.</p></section>${desktopPanel()}<section class="panel form-panel"><h2>About HourBoostr Remastered by Otter</h2><p class="muted small-text">Created by Otter as a continuation of Ezzpify’s HourBoostr, distributed under GPL-3.0. <a href="https://steamcommunity.com/id/pornhub_sex5/" target="_blank" rel="noopener noreferrer">Otter’s Steam profile</a>. Steam decides playtime accounting and profile presence. Hosting availability and uninterrupted account access are not guaranteed.</p></section></div>`;
+    `<div class="stack"><section class="panel form-panel"><div class="panel-title"><div><h2>Account settings</h2><p>Session credentials are stored separately from ordinary configuration.</p></div></div>${ui.config ? `<form id="account-form">${field('<label for="account-label">Account label</label>', `<input id="account-label" name="label" maxlength="80" required value="${escapeHtml(ui.config.label)}">`)}${renderAppearance(ui.config)}<label class="check-label"><input name="enabled" type="checkbox" ${ui.config.enabled ? "checked" : ""}>Enable this account</label><label class="check-label"><input name="auto-accept-friends" type="checkbox" ${ui.config.autoAcceptFriendRequests ? "checked" : ""}>Automatically accept incoming friend requests</label><p class="hint">Accept pending and new requests from individual Steam accounts. Idling always respects Steam’s playing-elsewhere lock.</p><label class="check-label"><input name="friend-welcome-enabled" type="checkbox" ${ui.config.friendWelcomeEnabled ? "checked" : ""}>Send a welcome message after automatic acceptance</label>${field('<label for="friend-welcome-message">Friend welcome message</label>', `<textarea id="friend-welcome-message" name="friend-welcome-message" maxlength="500" rows="3">${escapeHtml(ui.config.friendWelcomeMessage ?? "Thanks for adding me! I am AFK right now and will respond later.")}</textarea>`, "Requires automatic friend acceptance. Waits three seconds, then sends once per Steam friend after successful acceptance. Existing friends are not messaged. Delivery failures are logged without automatic retries.")}<div class="form-actions"><button class="button primary" type="submit">Save account</button>${button("Forget saved session", "forget")}${button("Remove account", "remove", false, 'data-tone="danger"')}</div></form>` : '<p class="muted">Add an account to configure its settings.</p>'}</section><section class="panel form-panel"><div class="panel-title"><div><h2>Releases and updates</h2><p>Current version: ${escapeHtml(ui.data.version)}</p></div></div><form id="release-form">${field('<label for="release-repo">Remaster release repository</label>', '<input id="release-repo" name="repository" placeholder="owner/HourBoostr-Remastered">', "Set this after the remaster is published. Updates are checked only when you ask.")}<div class="button-row"><button class="button" type="submit">Save release source</button>${button("Check for updates", "check-updates")}</div></form><p id="update-result" class="callout" role="status">No update check has run.</p><p class="hint">The CLI verifies SHA-256 checksums before staging an update. Apply and rollback operate on stopped, managed release directories.</p></section>${desktopPanel()}<section class="panel form-panel"><h2>About HourBoostr Remastered by Otter</h2><p class="muted small-text">Created by Otter as a continuation of Ezzpify’s HourBoostr, distributed under GPL-3.0. <a href="https://steamcommunity.com/id/pornhub_sex5/" target="_blank" rel="noopener noreferrer">Otter’s Steam profile</a>. Steam decides playtime accounting and profile presence. Hosting availability and uninterrupted account access are not guaranteed.</p></section></div>`;
 }
 
 function openLogin() {
@@ -621,6 +657,14 @@ document.addEventListener("click", async (event) => {
     }
     if (!action || action.disabled) return;
     const name = action.dataset.action;
+    if (name === "edit-custom-status") {
+      if (ui.dirty && !confirm("You have unsaved changes. Leave this page without saving?")) return;
+      ui.dirty = false;
+      ui.tab = "library";
+      await render();
+      $("#profile-mode")?.focus();
+      return;
+    }
     if (name.startsWith("go-")) {
       ui.tab = name.slice(3);
       await render();
@@ -757,6 +801,7 @@ document.addEventListener("click", async (event) => {
 });
 document.addEventListener("change", (event) => {
   if (event.target.id === "profile-mode") syncProfileDisplayFields();
+  if (["persona-state", "presence-badge"].includes(event.target.id)) updateAppearancePreview();
   if (!event.target.matches("[data-game]")) return;
   const id = Number(event.target.dataset.game);
   const ids = new Set(ui.config.selectedAppIds);
@@ -867,6 +912,7 @@ document.addEventListener("submit", async (event) => {
     if (event.target.id === "account-form") {
       ui.config.label = form.get("label");
       ui.config.presence = form.get("presence");
+      ui.config.presenceBadge = form.get("presence-badge");
       ui.config.enabled = form.has("enabled");
       ui.config.autoAcceptFriendRequests = form.has("auto-accept-friends");
       ui.config.friendWelcomeEnabled = form.has("friend-welcome-enabled");

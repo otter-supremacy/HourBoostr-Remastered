@@ -2,11 +2,13 @@
 
 [![Build and test](https://github.com/otter-supremacy/HourBoostr-Remastered/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/otter-supremacy/HourBoostr-Remastered/actions/workflows/ci.yml)
 
-A self-hosted **Steam hour booster / Steam idler** with modern sign-in, a local dashboard, Windows tray controls, and a command-line interface. **HourBoostr Remastered by Otter** is an independent continuation of [Ezzpify/HourBoostr](https://github.com/Ezzpify/HourBoostr), distributed under GPL-3.0. The original source and commit history are preserved.
+A free, open-source **Steam game idler and Steam hour booster** for Windows, Linux, and self-hosted VPSs. HourBoostr Remastered manages multiple Steam accounts, Steam Guard sign-in, schedules, and playtime estimates from a local dashboard. **HourBoostr Remastered by Otter** continues the original [Ezzpify/HourBoostr](https://github.com/Ezzpify/HourBoostr) under GPL-3.0.
 
-[Project website](https://otter-supremacy.github.io/HourBoostr-Remastered/) · [Download preview](https://github.com/otter-supremacy/HourBoostr-Remastered/releases/tag/v1.0.0-preview.1) · [Complete tutorial](docs/TUTORIAL.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Credits](CREDITS.md) · [Otter on GitHub](https://github.com/otter-supremacy) · [Otter on Steam](https://steamcommunity.com/id/pornhub_sex5/)
+[Official project website](https://hourboostr.pages.dev/) · [Steam idler guides](https://hourboostr.pages.dev/guides/) · [Download preview](https://github.com/otter-supremacy/HourBoostr-Remastered/releases/tag/v1.0.0-preview.1) · [Complete tutorial](docs/TUTORIAL.md) · [Credits](CREDITS.md) · [Otter on GitHub](https://github.com/otter-supremacy) · [Otter on Steam](https://steamcommunity.com/id/pornhub_sex5/)
 
-**Looking for the older HourBoostr?** This project continues the Steam-client-style HourBoostr approach with a new .NET 10 application. The preserved [original README](legacy/README.md) describes HourBoostr and SingleBoostr. The remaster does not implement SingleBoostr's trading-card farming.
+**Looking for classic HourBoostr or SingleBoostr?** Classic HourBoostr was a standalone Steam client for reporting game hours across multiple accounts without a local Steam installation. SingleBoostr used an installed Steam client for single-account idling and Steam trading-card farming. The remaster follows the standalone HourBoostr approach. The original source, history, and both legacy tools are documented in the [original README](legacy/README.md).
+
+**Try it in a browser.** [HourBoostr Members](https://hourboostr.pages.dev/signup) offers Google or email and password sign-in, a demo Steam account, one selected game, and previews of custom status and chat settings. Steam activity is simulated.
 
 ![HourBoostr Remastered dashboard showing account controls, game selection and connection details](docs/screenshots/overview.png)
 
@@ -35,6 +37,7 @@ Classic HourBoostr already supported multiple accounts and idling without instal
 | Selecting games | Search the owned library, select games manually, exclude titles, choose random groups, or rotate groups |
 | Session planning | Per-account time-zone schedules, overnight windows, and estimated-hour targets |
 | Visibility | Per-game estimates, daily charts, separate Steam-reported minutes, and connection status |
+| Steam Friends appearance | Friends status, display badges for Play Together, Mobile, Big Picture and VR, and a shortcut to custom status |
 | AFK messages | Private-friend replies with configurable cooldowns, quiet hours, exclusions, and echo suppression |
 | Friend requests | Opt-in acceptance of pending/new incoming individual requests, with spacing and bounded retries |
 | Credentials | No saved passwords/Guard codes; separate session files; Windows DPAPI or owner-only Linux files |
@@ -57,6 +60,9 @@ These are implementation differences, not speed or credited-hours benchmarks. St
 
 - [Complete tutorial: installation, sign-in, games, startup, VPS, Docker, updates and removal](docs/TUTORIAL.md)
 - [Troubleshooting and frequently asked questions](docs/TROUBLESHOOTING.md)
+- [Fix HourBoostr login and Steam Guard errors](https://hourboostr.pages.dev/guides/hourboostr-steam-guard-login/)
+- [Understand Steam-reported playtime](https://hourboostr.pages.dev/guides/steam-playtime-not-updating/)
+- [Set a custom Steam status](https://hourboostr.pages.dev/guides/custom-steam-status/)
 - [Feature and verification matrix](docs/FEATURE-MATRIX.md)
 - [Security and private data](SECURITY.md)
 - [Contributing](CONTRIBUTING.md) and [credits](CREDITS.md)
@@ -74,6 +80,7 @@ These are implementation differences, not speed or credited-hours benchmarks. St
 - Group Regulars suggestions use activity on separate days and explicit opt-in. The dashboard asks you to approve each friend request.
 - A private Steam profile comment inbox checks for new comments and screens eligible text. You review and publish any reply in Steam.
 - Optional rotation of profile game titles and custom status text, subject to Steam’s display behavior.
+- Per-account Steam Friends appearance and display badges in **Settings → Appearance**. Use the [source build](docs/TUTORIAL.md#build-from-source) for the Appearance controls.
 - Optional automatic acceptance of pending and new incoming friend requests, configurable per account in **Settings**. Only individual accounts with an incoming request are accepted; attempts are spaced and duplicate retries are limited.
 - Worker reconnection, session health probes, watchdog recovery, and service/startup installers.
 - A responsive local dashboard with dark/light themes, keyboard controls, and redacted diagnostics.
