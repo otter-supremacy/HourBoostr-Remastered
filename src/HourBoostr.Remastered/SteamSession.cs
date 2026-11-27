@@ -22,12 +22,16 @@ public sealed class SteamSession : IAsyncDisposable
     private readonly FriendMessages messages;
     private readonly ChatRoom groupChat;
     private readonly GroupReplyGate groupReplyGate = new();
+    private readonly GroupPresetGuard groupPresetGuard;
     private readonly CommunityClient community;
     private readonly ProfileComments profileComments;
     private readonly SemaphoreSlim profileCommentPoll = new(1, 1);
     private DateTimeOffset nextProfileCommentCheck;
     private volatile string profileCommentStatus = "Waiting for Steam";
     private readonly GroupRegulars groupRegulars;
+    private readonly GroupAutoJoin autoJoin;
+    private readonly HashSet<ulong> pendingClans = [];
+    private DateTimeOffset nextPendingClanSweep;
     private volatile RegularGroup[] regularGroups = [];
     private volatile bool friendsReady;
     private readonly SemaphoreSlim groupSync = new(1, 1);
@@ -46,7 +50,9 @@ public sealed class SteamSession : IAsyncDisposable
     private DateTimeOffset onlineSince;
     private readonly SemaphoreSlim networkCheck = new(1, 1);
     private static readonly AutomaticReplyTracker automaticReplies = new();
-    private readonly ReplyGate replyGate = new();
+    private readonly ReplyGate aiReplyGate = new();
+    private readonly PrivateReplyQueue aiReplyQueue = new();
+    private readonly ReplyGate presetReplyGate = new();
     private readonly FriendRequestGate friendRequestGate = new();
     private readonly FriendWelcomeGate friendWelcomeGate;
     private readonly HashSet<ulong> pendingFriends = new();
@@ -80,6 +86,7 @@ public sealed class SteamSession : IAsyncDisposable
     {
         this.store = store; this.vault = vault; this.events = events; id = config.Id;
         friendWelcomeGate = new(store, id);
+        groupPresetGuard = new(store, id);
         groupRegulars = new(store, id);
         profileComments = new(store, id);
         this.protectedNames = new(protectedNames, StringComparer.OrdinalIgnoreCase);
@@ -95,7 +102,21 @@ public sealed class SteamSession : IAsyncDisposable
         player = unified.CreateService<Player>(); messages = unified.CreateService<FriendMessages>();
         groupChat = unified.CreateService<ChatRoom>();
         community = unified.CreateService<CommunityClient>();
+        var groupTransport = new SteamGroupJoin(client, friends, groupChat, () => vault.Get(id)?.RefreshToken,
+            owner => JoinSettings(owner) is { Enabled: true }, () => nextGroupSync = DateTimeOffset.MinValue);
+        autoJoin = new(store, id, JoinSettings, groupTransport.Resolve,
+            (message, count, token) => AiReplyService.For(store).InterpretGroupInviteAsync(id, message, count, token), stop.Token);
         callbacks.SubscribeServiceNotification<ChatRoomClient, CChatRoom_IncomingChatMessage_Notification>(notification => _ = ReplyToGroupAsync(notification.Body));
+        callbacks.SubscribeServiceNotification<ChatRoomClient, CChatRoom_MemberStateChange_Notification>(notification =>
+        {
+            var invite = notification.Body;
+            var self = client.SteamID;
+            if (self is null || invite.chat_group_id == 0 || invite.member?.accountid != self.AccountID
+                || invite.change != SteamKit2.Internal.EChatRoomMemberStateChange.k_EChatRoomMemberStateChange_Invited) return;
+            var owner = self.ConvertToUInt64().ToString();
+            if (GroupAutoJoin.Allows(JoinSettings(owner), JoinSource.Direct))
+                autoJoin.Submit(owner, JoinSource.Direct, new(GroupKind.ChatInvite, invite.chat_group_id.ToString()));
+        });
         view = new() { Id = id, Label = config.Label, HasSavedSession = vault.Get(id) is not null, LibraryCount = statistics.Games.Count };
         authenticator = new((state, message) => Change(state, message), stop.Token);
         callbacks.Subscribe<SteamClient.ConnectedCallback>(callback => { _ = ConnectedAsync(); });
@@ -105,26 +126,29 @@ public sealed class SteamSession : IAsyncDisposable
         {
             if (callback.Result != EResult.OK) { disconnectReason = callback.Result.ToString(); if (callback.Result == EResult.RateLimitExceeded) retryNotBefore = DateTimeOffset.UtcNow.AddMinutes(5); events.Add("warning", id, "Steam logged off: " + callback.Result); lock (gate) view.LoggedIn = false; client.Disconnect(); }
         });
-        callbacks.Subscribe<SteamUser.AccountInfoCallback>(_ =>
-        {
-            lock (gate) accountInfoReady = true;
-            ApplyPresence(store.Account(id));
-        });
+        callbacks.Subscribe<SteamUser.AccountInfoCallback>(_ => { accountInfoReady = true; ApplyPresence(store.Account(id)); });
         callbacks.Subscribe<SteamUser.PlayingSessionStateCallback>(callback => { lock (gate) view.PlayingElsewhere = callback.PlayingBlocked; });
-        callbacks.SubscribeServiceNotification<FriendMessagesClient, CFriendMessages_IncomingMessage_Notification>(notification => _ = ReplyAsync(notification.Body.steamid_friend, notification.Body.chat_entry_type, notification.Body.local_echo, notification.Body.message));
+        callbacks.SubscribeServiceNotification<FriendMessagesClient, CFriendMessages_IncomingMessage_Notification>(notification => _ = ReplyAsync(notification.Body.steamid_friend, notification.Body.chat_entry_type, notification.Body.local_echo, notification.Body.message, notification.Body.message_no_bbcode, unified: true));
         callbacks.Subscribe<SteamFriends.FriendMsgCallback>(message => _ = ReplyAsync(message.Sender.ConvertToUInt64(), (int)message.EntryType, false, message.Message ?? ""));
         callbacks.Subscribe<SteamFriends.FriendsListCallback>(callback =>
         {
             lock (gate)
             {
-                if (!callback.Incremental) { pendingFriends.Clear(); friendsReady = true; }
+                if (!callback.Incremental) { pendingFriends.Clear(); pendingClans.Clear(); friendsReady = true; }
                 foreach (var friend in callback.FriendList)
                 {
                     var steamId = friend.SteamID.ConvertToUInt64();
                     if (friend.SteamID.AccountType == EAccountType.Individual && friend.Relationship == EFriendRelationship.RequestRecipient) pendingFriends.Add(steamId);
                     else pendingFriends.Remove(steamId);
+                    if (!GroupInvitation.IsClan(steamId)) continue;
+                    if ((EClanRelationship)friend.Relationship == EClanRelationship.Invited) pendingClans.Add(steamId);
+                    else pendingClans.Remove(steamId);
                 }
             }
+            if (callback.Incremental)
+                QueueClanInvites(callback.FriendList.Where(entry => (EClanRelationship)entry.Relationship == EClanRelationship.Invited)
+                    .Select(entry => entry.SteamID.ConvertToUInt64()).Where(GroupInvitation.IsClan));
+            else QueuePendingClanInvites();
         });
         callbacks.Subscribe<SteamFriends.FriendAddedCallback>(callback =>
         {
@@ -136,6 +160,29 @@ public sealed class SteamSession : IAsyncDisposable
             events.Add(callback.Result == EResult.OK ? "info" : "warning", id, callback.Result == EResult.OK ? "Accepted an incoming friend request." : "Steam could not accept an incoming friend request: " + callback.Result);
             if (callback.Result == EResult.OK) _ = SendFriendWelcomeAsync(callback.SteamID.ConvertToUInt64());
         });
+    }
+
+    private AutoJoinSettings? JoinSettings(string owner)
+    {
+        if (stop.IsCancellationRequested || !client.IsConnected || client.SteamID?.ConvertToUInt64().ToString() != owner)
+            return null;
+        lock (gate) if (!view.LoggedIn) return null;
+        return store.Account(id) is { Enabled: true } config ? config.AutoJoinGroups : null;
+    }
+
+    private void QueueClanInvites(IEnumerable<ulong> invites)
+    {
+        var owner = client.SteamID?.ConvertToUInt64().ToString();
+        if (owner is null || !GroupAutoJoin.Allows(JoinSettings(owner), JoinSource.Direct)) return;
+        foreach (var invite in invites)
+            autoJoin.Submit(owner, JoinSource.Direct, new(GroupKind.ClanInvite, invite.ToString()));
+    }
+
+    private void QueuePendingClanInvites()
+    {
+        ulong[] invites;
+        lock (gate) invites = pendingClans.ToArray();
+        QueueClanInvites(invites);
     }
 
     public void Start()
@@ -158,6 +205,7 @@ public sealed class SteamSession : IAsyncDisposable
             view.LibraryCount = statistics.Games.Count; view.SessionSeconds = statistics.SessionSeconds;
             view.TotalIdleSeconds = statistics.Games.Values.Sum(x => x.IdleSeconds);
             view.LastLibrarySync = statistics.LastLibrarySync;
+            view.GroupJoinActivity = autoJoin.History(view.SteamId);
             return JsonDefaults.Clone(view);
         }
     }
@@ -179,8 +227,7 @@ public sealed class SteamSession : IAsyncDisposable
     {
         if (disposed || stop.IsCancellationRequested || needsAuth) return;
         if (DateTimeOffset.UtcNow < retryNotBefore) { reconnectAt = retryNotBefore; return; }
-        reconnectAt = DateTimeOffset.MaxValue; lastCustomDisplay = null; nextReassert = DateTimeOffset.MinValue;
-        lock (gate) { accountInfoReady = false; lastPresence = null; }
+        reconnectAt = DateTimeOffset.MaxValue; accountInfoReady = false; lastPresence = null; lastCustomDisplay = null; nextReassert = DateTimeOffset.MinValue;
         Change("connecting", "Connecting to Steam…"); client.Connect();
     }
     private async Task ConnectedAsync()
@@ -288,6 +335,8 @@ public sealed class SteamSession : IAsyncDisposable
     private void Disconnected(SteamClient.DisconnectedCallback callback)
     {
         friendsReady = false;
+        nextPendingClanSweep = DateTimeOffset.MinValue;
+        lock (gate) pendingClans.Clear();
         regularGroups = [];
         lock (gate) { view.Connected = false; view.LoggedIn = false; view.PlayingAppIds = []; view.PlayingNames = []; }
         if (disposed || stop.IsCancellationRequested || needsAuth) return;
@@ -305,14 +354,12 @@ public sealed class SteamSession : IAsyncDisposable
     }
     private void ApplyPresence(AccountSettings? config)
     {
+        if (!accountInfoReady || !view.LoggedIn) return;
         var presence = (Status: config?.Presence ?? "online", Badge: config?.PresenceBadge ?? "normal");
-        lock (gate)
-        {
-            if (!accountInfoReady || !view.LoggedIn || lastPresence == presence) return;
-            client.Send(SteamAppearance.Packet(presence.Status, presence.Badge));
-            lastPresence = presence;
-            view.PersonaName = friends.GetPersonaName();
-        }
+        if (lastPresence == presence) return;
+        client.Send(SteamAppearance.Packet(presence.Status, presence.Badge));
+        lastPresence = presence;
+        lock (gate) view.PersonaName = friends.GetPersonaName();
     }
     public async Task RefreshLibraryAsync()
     {
@@ -369,6 +416,13 @@ public sealed class SteamSession : IAsyncDisposable
         if (disposed) return;
         var config = store.Account(id); if (config is null) return;
         if (!client.IsConnected && !needsAuth && now >= reconnectAt) Connect();
+        var directInvitesEnabled = config.Enabled && GroupAutoJoin.Allows(config.AutoJoinGroups, JoinSource.Direct);
+        if (!directInvitesEnabled) nextPendingClanSweep = DateTimeOffset.MinValue;
+        else if (friendsReady && client.SteamID is not null && now >= nextPendingClanSweep)
+        {
+            nextPendingClanSweep = now.AddMinutes(10);
+            QueuePendingClanInvites();
+        }
         if (client.SteamID is not null && now >= nextGroupSync)
         { nextGroupSync = now.AddSeconds(30); _ = SyncGroupChatsAsync(); }
         var elapsed = Math.Clamp((now - lastTick).TotalSeconds, 0, 10); lastTick = now;
@@ -553,13 +607,14 @@ public sealed class SteamSession : IAsyncDisposable
             if (owner is null || !client.IsConnected) return;
             var selected = config is { Enabled: true } ? groupRegulars.SelectedGroups(owner, DateTimeOffset.UtcNow) : [];
             var replyEnabled = config is { Enabled: true, GroupReplies.Enabled: true };
-            var enabled = replyEnabled || selected.Length > 0;
+            var joinFromGroup = config is { Enabled: true } && GroupAutoJoin.Allows(config.AutoJoinGroups, JoinSource.GroupChat);
+            var enabled = replyEnabled || joinFromGroup || selected.Length > 0;
             if (!enabled && !groupsActive) return;
             var request = new CChatRoom_SetSessionActiveChatRoomGroups_Request();
             if (enabled)
             {
                 var joined = await GetRegularGroupsAsync(stop.Token);
-                request.chat_group_ids.AddRange(joined.Where(group => replyEnabled || selected.Contains(group.Id))
+                request.chat_group_ids.AddRange(joined.Where(group => replyEnabled || joinFromGroup || selected.Contains(group.Id))
                     .Select(group => ulong.Parse(group.Id, System.Globalization.CultureInfo.InvariantCulture)));
             }
             var active = await groupChat.SetSessionActiveChatRoomGroups(request);
@@ -647,6 +702,10 @@ public sealed class SteamSession : IAsyncDisposable
                 events.Add("info", id, $"Group notification received: system={incoming.server_message is not null}, text={!string.IsNullOrWhiteSpace(incoming.message)}, automatedSender={IsAutomatedGroupSender(incoming.steamid_sender)}, ageSeconds={DateTimeOffset.UtcNow.ToUnixTimeSeconds() - incoming.timestamp}.");
             }
             if (stop.IsCancellationRequested || config is not { Enabled: true } || client.SteamID is null || incoming.server_message is not null || string.IsNullOrWhiteSpace(incoming.message) || IsAutomatedGroupSender(incoming.steamid_sender)) return;
+            var now = DateTimeOffset.UtcNow;
+            if (incoming.timestamp >= now.ToUnixTimeSeconds() - 120
+                && autoJoin.Observe(client.SteamID.ConvertToUInt64().ToString(), JoinSource.GroupChat,
+                    $"{incoming.chat_group_id}:{incoming.chat_id}", incoming.message, config.AutoJoinGroups)) return;
             if (CanSuggestFriend(incoming.steamid_sender))
             {
                 try
@@ -663,28 +722,35 @@ public sealed class SteamSession : IAsyncDisposable
                     // A storage issue in the private suggestions feature must not stop existing chat replies.
                 }
             }
+            var room = $"{incoming.chat_group_id}:{incoming.chat_id}";
+            var useAi = config.AiReplies.Groups;
             var reply = groupReplyGate.Reserve(config.GroupReplies, incoming.chat_group_id, incoming.chat_id, incoming.steamid_sender,
-                client.SteamID.ConvertToUInt64(), incoming.timestamp, incoming.ordinal, DateTimeOffset.UtcNow);
+                client.SteamID.ConvertToUInt64(), incoming.timestamp, incoming.ordinal, DateTimeOffset.UtcNow, useAi);
             if (reply is null) return;
-            var replySource = "preset";
-            if (config.AiReplies.Groups)
+            var replySource = useAi ? "AI" : "preset";
+            if (useAi)
             {
-                var generated = await AiReplyService.For(store).GenerateAsync(id, config.AiReplies, $"group:{incoming.chat_group_id}:{incoming.chat_id}", incoming.message, stop.Token);
-                if (generated is not null)
-                {
-                    reply = generated;
-                    replySource = "AI";
-                }
+                reply = await AiReplyService.For(store).GenerateAsync(id, config.AiReplies, $"group:{incoming.chat_group_id}:{incoming.chat_id}",
+                    incoming.message, stop.Token, groupSender: incoming.steamid_sender, waitForCapacity: true, preset: reason =>
+                    {
+                        if (!groupPresetGuard.Claim(room, DateTimeOffset.UtcNow)) return null;
+                        replySource = $"preset, {reason}";
+                        return groupReplyGate.NextPreset(config.GroupReplies, incoming.chat_group_id, incoming.chat_id);
+                    });
+                if (string.IsNullOrWhiteSpace(reply)) return;
             }
             await AutomaticReplyDelay.SendAsync(
-                () => client.IsConnected && store.Account(id) is { Enabled: true, GroupReplies.Enabled: true },
+                () => client.IsConnected && store.Account(id) is { Enabled: true, GroupReplies.Enabled: true } current && current.AiReplies.Groups == useAi,
                 async () =>
                 {
+                    var sender = new SteamID(incoming.steamid_sender);
+                    var addressed = MentionGroupSender(sender.AccountID, friends.GetFriendPersonaName(sender), reply);
                     var result = await groupChat.SendChatMessage(new CChatRoom_SendChatMessage_Request {
-                        chat_group_id = incoming.chat_group_id, chat_id = incoming.chat_id, message = reply, echo_to_sender = false });
+                        chat_group_id = incoming.chat_group_id, chat_id = incoming.chat_id, message = addressed, echo_to_sender = false });
                     var outcome = result.Result;
+                    if (outcome == EResult.OK && replySource == "AI") groupPresetGuard.ConfirmAi(room, now);
                     events.Add(outcome == EResult.OK ? "info" : "warning", id, outcome == EResult.OK
-                        ? "Sent an automatic group reply."
+                        ? $"Sent an automatic group reply ({replySource})."
                         : $"Steam returned {outcome} ({(int)outcome}) for an automatic group reply ({replySource}). No retry scheduled.");
                 }, stop.Token);
         }
@@ -695,6 +761,13 @@ public sealed class SteamSession : IAsyncDisposable
                 events.Add("warning", id, $"Group reply could not be delivered ({error.GetType().Name}). No retry scheduled.");
         }
     }
+    internal static string MentionGroupSender(uint accountId, string? personaName, string reply)
+    {
+        var label = new string((personaName ?? "").Where(c => !char.IsControl(c) && c is not ('[' or ']' or '\\')).ToArray()).Trim();
+        if (label.Length == 0 || label == "[unknown]" || label == "unknown") label = "member";
+        return FormattableString.Invariant($"[mention={accountId}]@{label}[/mention] {reply}");
+    }
+
     private bool IsAutomatedGroupSender(ulong sender) => localAccounts.TryGetValue(sender, out var senderAccount)
         && store.Account(senderAccount) is { Enabled: true, GroupReplies.Enabled: true };
     private async Task SendFriendWelcomeAsync(ulong recipient)
@@ -714,34 +787,78 @@ public sealed class SteamSession : IAsyncDisposable
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
         catch (Exception) { if (!stop.IsCancellationRequested) events.Add("warning", id, "Friend welcome could not be delivered; no automatic retry will be made."); }
     }
-    private async Task ReplyAsync(ulong sender, int entryType, bool localEcho, string text)
+    private async Task ReplyAsync(ulong sender, int entryType, bool localEcho, string text, string? plain = null, bool unified = false)
     {
         MarkSteamActivity();
-        if (entryType != (int)EChatEntryType.ChatMsg || client.SteamID is null) return;
-        var config = store.Account(id); if (config is not { Enabled: true }) return;
-        if (automaticReplies.Matches(sender, client.SteamID.ConvertToUInt64(), text, DateTimeOffset.UtcNow)) return;
-        if (!replyGate.TryReserve(sender, client.SteamID.ConvertToUInt64(), friends.GetFriendRelationship(new SteamID(sender)) == EFriendRelationship.Friend, localEcho, config.Afk, DateTimeOffset.UtcNow)) return;
+        if (entryType != (int)EChatEntryType.ChatMsg || localEcho || stop.IsCancellationRequested || client.SteamID is not { } steamId) return;
+        var self = steamId.ConvertToUInt64();
+        if (sender == self || store.Account(id) is not { Enabled: true } config) return;
+        var content = string.IsNullOrWhiteSpace(plain) ? text : plain;
+        var now = DateTimeOffset.UtcNow;
+        if (automaticReplies.Matches(sender, self, text, now) || automaticReplies.Matches(sender, self, content, now)
+            || autoJoin.Observe(self.ToString(), JoinSource.PrivateChat, sender.ToString(), string.IsNullOrWhiteSpace(text) ? content : text, config.AutoJoinGroups))
+            return;
+        if (ReplySettings(sender, self) is null) return;
+        var token = stop.Token;
+        if (config.AiReplies.PrivateMessages)
+            await aiReplyQueue.OfferAsync(sender, content, unified, (batch, cancellation) => SendPrivateReplyAsync(sender, self, batch, useAi: true, cancellation), token);
+        else
+            await SendPrivateReplyAsync(sender, self, content, useAi: false, token);
+    }
+
+    private AccountSettings? ReplySettings(ulong sender, ulong self)
+    {
+        var current = store.Account(id);
+        return client.IsConnected && client.SteamID?.ConvertToUInt64() == self
+            && current is { Enabled: true, Afk.Enabled: true }
+            && friends.GetFriendRelationship(new SteamID(sender)) == EFriendRelationship.Friend
+            && !current.Afk.ExcludedFriends.Contains(sender.ToString())
+            && !(current.Afk.QuietHours.Enabled && ScheduleRule.Allows(current.Afk.QuietHours, DateTimeOffset.UtcNow)) ? current : null;
+    }
+
+    private async Task SendPrivateReplyAsync(ulong sender, ulong self, string text, bool useAi, CancellationToken token)
+    {
+        var replyGate = useAi ? aiReplyGate : presetReplyGate;
+        var reserved = false;
+        var delivered = false;
         try
         {
-            var reply = config.Afk.Message;
-            if (config.AiReplies.PrivateMessages)
-                reply = await AiReplyService.For(store).GenerateAsync(id, config.AiReplies, "friend:" + sender, text, stop.Token) ?? reply;
+            if (ReplySettings(sender, self) is not { } config || config.AiReplies.PrivateMessages != useAi) return;
+            if (useAi)
+            {
+                var remaining = replyGate.Remaining(sender, TimeSpan.FromSeconds(config.AiReplies.CooldownSeconds), DateTimeOffset.UtcNow);
+                if (remaining > TimeSpan.Zero) await Task.Delay(remaining, token);
+                if (ReplySettings(sender, self) is not { AiReplies.PrivateMessages: true } current) return;
+                config = current;
+            }
+            reserved = replyGate.TryReserve(sender, self, true, false, config.Afk, DateTimeOffset.UtcNow, useAi ? config.AiReplies.CooldownSeconds : null);
+            if (!reserved) return;
+            var replySource = useAi ? "AI" : "preset";
+            var reply = useAi ? await AiReplyService.For(store).GenerateAsync(id, config.AiReplies, "friend:" + sender, text, token,
+                waitForCapacity: true, preset: reason => { replySource = $"preset, {reason}"; return config.Afk.Message; }) : config.Afk.Message;
+            if (string.IsNullOrWhiteSpace(reply)) return;
             await AutomaticReplyDelay.SendAsync(
-                () => client.IsConnected && client.SteamID is not null
-                    && store.Account(id) is { Enabled: true, Afk.Enabled: true } current
-                    && friends.GetFriendRelationship(new SteamID(sender)) == EFriendRelationship.Friend
-                    && !current.Afk.ExcludedFriends.Contains(sender.ToString())
-                    && !(current.Afk.QuietHours.Enabled && ScheduleRule.Allows(current.Afk.QuietHours, DateTimeOffset.UtcNow)),
+                () => ReplySettings(sender, self)?.AiReplies.PrivateMessages == useAi,
                 async () =>
                 {
-                    automaticReplies.Record(client.SteamID!.ConvertToUInt64(), sender, reply, DateTimeOffset.UtcNow);
-                    var result = await messages.SendMessage(new CFriendMessages_SendMessage_Request { steamid = sender, chat_entry_type = entryType, message = reply, contains_bbcode = false, echo_to_sender = false });
-                    if (result.Result != EResult.OK) throw new InvalidOperationException();
-                    events.Add("info", id, "Sent an automatic reply to an incoming private friend message.");
-                }, stop.Token);
+                    automaticReplies.Record(self, sender, reply, DateTimeOffset.UtcNow);
+                    var result = await messages.SendMessage(new CFriendMessages_SendMessage_Request { steamid = sender, chat_entry_type = (int)EChatEntryType.ChatMsg, message = reply, contains_bbcode = false, echo_to_sender = false });
+                    var outcome = result.Result;
+                    if (outcome != EResult.OK)
+                    {
+                        events.Add("warning", id, $"Steam returned {outcome} ({(int)outcome}) for an automatic private reply ({replySource}).");
+                        return;
+                    }
+                    delivered = true;
+                    events.Add("info", id, $"Sent an automatic private reply ({replySource}).");
+                }, token);
         }
-        catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-        catch (Exception) { replyGate.Release(sender); if (!stop.IsCancellationRequested) events.Add("warning", id, "AFK reply could not be delivered."); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception) { if (!token.IsCancellationRequested) events.Add("warning", id, "AFK reply could not be delivered."); }
+        finally
+        {
+            if (reserved) replyGate.Complete(sender, delivered);
+        }
     }
     public async ValueTask DisposeAsync()
     {
@@ -749,6 +866,7 @@ public sealed class SteamSession : IAsyncDisposable
         client.Disconnect();
         if (callbackPump is not null) await callbackPump.WaitAsync(TimeSpan.FromSeconds(3));
         lock (gate) store.Write($"statistics-{id}.json", statistics);
+        await autoJoin.StopAsync();
         stop.Dispose();
     }
 }

@@ -41,6 +41,7 @@ public sealed class AccountSettings
     public bool AutoAcceptFriendRequests { get; set; }
     public bool FriendWelcomeEnabled { get; set; }
     public string FriendWelcomeMessage { get; set; } = "Thanks for adding me! I am AFK right now and will respond later.";
+    public AutoJoinSettings AutoJoinGroups { get; set; } = new();
     public ScheduleSettings Schedule { get; set; } = new();
     public AfkSettings Afk { get; set; } = new();
     public GroupReplySettings GroupReplies { get; set; } = new();
@@ -64,6 +65,8 @@ public sealed class AccountSettings
         SelectedAppIds = SelectedAppIds.Where(x => x > 0).Distinct().ToList();
         ExcludedAppIds = ExcludedAppIds.Where(x => x > 0).Distinct().ToList();
         if (TargetHours.Any(x => !double.IsFinite(x.Value) || x.Value <= 0 || x.Value > 1000000)) throw new ArgumentException("Hour targets must be positive finite numbers.");
+        if (AutoJoinGroups is null || AutoJoinGroups.DailyLimit is < 1 or > 25)
+            throw new ArgumentException("The automatic group join limit must be between 1 and 25 per UTC day.");
         Schedule.Validate(); Afk.Validate();
         if (GroupReplies is null) throw new ArgumentException("Group reply settings are incomplete.");
         GroupReplies.Validate();
@@ -114,12 +117,15 @@ public sealed class AiReplySettings
     public bool PrivateMessages { get; set; }
     public bool Groups { get; set; }
     public string Instructions { get; set; } = "Use casual, friendly language. Keep replies to one or two short sentences. Say you are an automated assistant replying while the account owner is away. Do not invent facts about the owner.";
+    public string? QwenInstructions { get; set; }
     public int DailyLimit { get; set; } = 100;
     public int CooldownSeconds { get; set; } = 15;
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(Instructions) || Instructions.Length > 2000) throw new ArgumentException("AI instructions must be 1–2000 characters.");
-        if (DailyLimit is < 1 or > 500) throw new ArgumentException("AI daily limit must be 1–500 requests per account.");
+        if (QwenInstructions is not null && (string.IsNullOrWhiteSpace(QwenInstructions) || QwenInstructions.Length > 2000))
+            throw new ArgumentException("Qwen instructions must be 1–2000 characters.");
+        if (DailyLimit is < 1 or > 500) throw new ArgumentException("AI daily limit must be 1–500 requests per model per account.");
         if (CooldownSeconds is < 2 or > 3600) throw new ArgumentException("AI cooldown must be 2–3600 seconds.");
     }
 }
@@ -213,4 +219,5 @@ public sealed class AccountView
     public DateTimeOffset? NextProfileDisplayChange { get; set; }
     public string? AuthPrompt { get; set; }
     public string? QrSvg { get; set; }
+    public GroupJoinActivity[] GroupJoinActivity { get; set; } = [];
 }

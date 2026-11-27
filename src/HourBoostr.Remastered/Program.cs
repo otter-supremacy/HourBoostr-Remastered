@@ -9,12 +9,22 @@ try
     var options = LaunchOptions.Parse(args);
     var store = new DataStore(options.DataDirectory);
     var vault = new SecretVault(store);
-    if (args.FirstOrDefault() == "ai-key")
+    if (args.FirstOrDefault() is "ai-key" or "ai-qwen-key")
     {
         var key = args.Contains("--remove") ? "" : Console.ReadLine();
         if (key is null || (!args.Contains("--remove") && string.IsNullOrWhiteSpace(key))) throw new ArgumentException("Supply a Groq key on standard input, or use --remove.");
-        AiReplyService.For(store).SaveKey(key);
-        Console.WriteLine(args.Contains("--remove") ? "Backend Groq key removed." : "Backend Groq key saved. No restart required.");
+        var ai = AiReplyService.For(store);
+        if (args[0] == "ai-qwen-key")
+        {
+            if (key.Length != 0) await ai.VerifyQwenKeyAsync(key);
+            ai.SaveQwenKey(key);
+            Console.WriteLine(key.Length == 0 ? "Backend Qwen key removed." : "Qwen preview passed. Backend key saved.");
+        }
+        else
+        {
+            ai.SaveKey(key);
+            Console.WriteLine(key.Length == 0 ? "Backend Groq key removed." : "Backend Groq key saved. No restart required.");
+        }
         return 0;
     }
     if (await Cli.ExecuteAsync(args, options, store, vault) is int code) return code;
@@ -86,7 +96,15 @@ try
     {
         var account = store.Account(request.AccountId) ?? throw new KeyNotFoundException("Account not found.");
         if (request.Message is null || request.Message.Length is < 1 or > 1000) throw new ArgumentException("Preview message must be 1–1000 characters.");
-        var reply = await AiReplyService.For(store).GenerateAsync(account.Id, account.AiReplies, "preview", request.Message, context.RequestAborted);
+        var model = request.StartWith switch
+        {
+            null or "auto" => null,
+            "gpt" => AiReplyService.Model,
+            "qwen" => AiReplyService.QwenModel,
+            _ => throw new ArgumentException("Choose Automatic, GPT, or Qwen for the preview.")
+        };
+        var reply = await AiReplyService.For(store).GenerateAsync(account.Id, account.AiReplies,
+            "preview:" + (request.StartWith ?? "auto"), request.Message, context.RequestAborted, model);
         return Results.Ok(new { reply, details = AiReplyService.For(store).Status() });
     }).RequireRateLimiting("signin");
     app.MapPost("/api/shutdown", (IHostApplicationLifetime lifetime) =>
@@ -126,6 +144,7 @@ try
         var current = store.Account(id) ?? throw new KeyNotFoundException("Account not found.");
         request.Id = id; request.LoginName = current.LoginName;
         request.PresenceBadge ??= current.PresenceBadge;
+        if (request.AiReplies is { } replies) replies.QwenInstructions ??= current.AiReplies.QwenInstructions;
         request.Validate();
         var display = request.ProfileDisplay; var previous = current.ProfileDisplay;
         display.AnchorUtc = display.Mode != previous.Mode || display.IntervalMinutes != previous.IntervalMinutes || display.CustomText != previous.CustomText || !display.AppIds.SequenceEqual(previous.AppIds)

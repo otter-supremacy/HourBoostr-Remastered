@@ -11,6 +11,49 @@ public sealed class GroupReplyTests
         gate.Reserve(settings, 1, room, sender, 4, (uint)now.AddSeconds(second).ToUnixTimeSeconds(), 1, now.AddSeconds(second));
 
     [Fact]
+    public void GroupFallbackWaitsForNewerConfirmedAiEvenAfterRestart()
+    {
+        var path = Directory.CreateTempSubdirectory();
+        try
+        {
+            var store = new DataStore(path.FullName);
+            var guard = new GroupPresetGuard(store, "cow");
+            Assert.True(guard.Claim("1:2", now));
+            guard = new GroupPresetGuard(store, "cow");
+            guard.ConfirmAi("1:2", now.AddSeconds(-1));
+            Assert.False(guard.Claim("1:2", now.AddMinutes(6)));
+            Assert.False(guard.Claim("1:3", now.AddSeconds(30)));
+            guard.ConfirmAi("1:2", now.AddMinutes(7));
+            guard = new GroupPresetGuard(store, "cow");
+            Assert.False(guard.Claim("1:2", now.AddMinutes(8)));
+            Assert.True(guard.Claim("1:2", now.AddMinutes(10)));
+            Assert.False(guard.Claim("1:3", now.AddMinutes(11)));
+            Assert.True(guard.Claim("1:3", now.AddMinutes(20)));
+            Assert.False(guard.Claim("1:2", now.AddHours(2)));
+        }
+        finally { path.Delete(true); }
+    }
+
+    [Fact]
+    public void GroupMentionUsesSenderIdAndProtectsTheNameBoundary()
+    {
+        Assert.Equal("[mention=42]@Cow[/mention] hey", SteamSession.MentionGroupSender(42, "Cow", "hey"));
+        Assert.Equal("[mention=43]@member[/mention] hey", SteamSession.MentionGroupSender(43, null, "hey"));
+        Assert.Equal("[mention=44]@A/mention[/mention] hey", SteamSession.MentionGroupSender(44, "A[/mention]", "hey"));
+    }
+
+    [Fact]
+    public void AiReservationDoesNotSelectOrAdvancePreset()
+    {
+        var gate = new GroupReplyGate();
+        var now = DateTimeOffset.UtcNow;
+        var settings = new GroupReplySettings { Enabled = true, Messages = ["one", "two", "three"] };
+        Assert.Equal(string.Empty, gate.Reserve(settings, 1, 2, 3, 4, (uint)now.ToUnixTimeSeconds(), 1, now, true));
+        now = now.AddSeconds(10);
+        Assert.Equal("one", gate.Reserve(settings, 1, 2, 3, 4, (uint)now.ToUnixTimeSeconds(), 2, now));
+    }
+
+    [Fact]
     public void CyclesIndependentlyPerRoomAndAccount()
     {
         var gate = new GroupReplyGate();

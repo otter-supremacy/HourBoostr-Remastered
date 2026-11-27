@@ -76,7 +76,7 @@ These are implementation differences, not speed or credited-hours benchmarks. St
 - Estimated hour targets, time-zone-aware schedules, overnight windows, and daylight saving support.
 - Automatic pauses while Steam reports the account is playing elsewhere.
 - Private-friend AFK replies with cooldowns, exclusions, quiet hours, and echo suppression.
-- Rotating group replies, optional friend welcome messages, and optional Groq screening or reply generation. See the [chat and profile tools guide](docs/CHAT-AND-PROFILE.md).
+- Rotating group replies, sender mentions, optional friend welcome messages, and Groq replies with separate GPT and Qwen request budgets. See the [chat and profile tools guide](docs/CHAT-AND-PROFILE.md).
 - Group Regulars suggestions use activity on separate days and explicit opt-in. The dashboard asks you to approve each friend request.
 - A private Steam profile comment inbox checks for new comments and screens eligible text. You review and publish any reply in Steam.
 - Optional rotation of profile game titles and custom status text, subject to Steam’s display behavior.

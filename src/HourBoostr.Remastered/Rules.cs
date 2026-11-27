@@ -45,19 +45,36 @@ public static class GameSelection
 public sealed class ReplyGate
 {
     private readonly Dictionary<ulong, DateTimeOffset> last = [];
+    private readonly HashSet<ulong> pending = [];
     private readonly object gate = new();
-    public bool TryReserve(ulong sender, ulong self, bool isFriend, bool localEcho, AfkSettings settings, DateTimeOffset now)
+    public bool TryReserve(ulong sender, ulong self, bool isFriend, bool localEcho, AfkSettings settings, DateTimeOffset now, int? aiCooldownSeconds = null)
     {
         if (!settings.Enabled || localEcho || sender == self || !isFriend || settings.ExcludedFriends.Contains(sender.ToString())) return false;
         if (settings.QuietHours.Enabled && ScheduleRule.Allows(settings.QuietHours, now)) return false;
         lock (gate)
         {
+            if (pending.Contains(sender)) return false;
             foreach (var id in last.Where(x => now - x.Value > TimeSpan.FromDays(1)).Select(x => x.Key).ToList()) last.Remove(id);
-            if (last.TryGetValue(sender, out var previous) && now - previous < TimeSpan.FromMinutes(settings.CooldownMinutes)) return false;
+            var cooldown = aiCooldownSeconds is int seconds ? TimeSpan.FromSeconds(seconds) : TimeSpan.FromMinutes(settings.CooldownMinutes);
+            if (last.TryGetValue(sender, out var previous) && now - previous < cooldown) return false;
+            pending.Add(sender);
             last[sender] = now; return true;
         }
     }
-    public void Release(ulong sender) { lock (gate) last.Remove(sender); }
+
+    public void Complete(ulong sender, bool delivered)
+    {
+        lock (gate)
+        {
+            if (pending.Remove(sender) && !delivered) last.Remove(sender);
+        }
+    }
+
+    public TimeSpan Remaining(ulong sender, TimeSpan duration, DateTimeOffset now)
+    {
+        lock (gate) return last.TryGetValue(sender, out var previous) && previous + duration > now
+            ? previous + duration - now : TimeSpan.Zero;
+    }
 }
 
 public static class HealthRule

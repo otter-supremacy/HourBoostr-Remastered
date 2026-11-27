@@ -62,6 +62,7 @@ const ui = {
 let toastTimer, searchTimer, dialogSubmit;
 
 async function api(path, method = "GET", body) {
+  if (method === "DELETE" && /^\/api\/accounts\/[a-f0-9]{32}$/.test(path) && window.HBRControl?.enabled) return window.HBRControl.approve("remove-account", path.split("/").pop());
   const options = {
     method,
     credentials: "same-origin",
@@ -214,16 +215,18 @@ async function render() {
   $("#breadcrumb").textContent =
     { afk: "AFK REPLIES", library: "GAME LIBRARY" }[ui.tab] ||
     ui.tab.toUpperCase();
-  if (!ui.selected && !["diagnostics", "settings"].includes(ui.tab)) {
+  const controlTab = ["server", "accounts", "activity", "prices"].includes(ui.tab);
+  if (!ui.selected && !["diagnostics", "settings"].includes(ui.tab) && !controlTab) {
     $("#main").innerHTML = noAccount();
     return;
   }
-  if (accountId) {
+  if (accountId && !controlTab) {
     const config = await api(`/api/accounts/${accountId}/settings`);
     if (generation !== ui.renderGeneration || accountId !== ui.selected) return;
     ui.config = config;
   }
   if (ui.tab === "overview") renderOverview();
+  if (controlTab) await window.HBRControl?.render(ui.tab);
   if (ui.tab === "library") {
     await loadLibrary();
     if (generation !== ui.renderGeneration) return;
@@ -352,7 +355,7 @@ function renderLibrary() {
                 .map((word) => word[0])
                 .join("")
                 .toUpperCase(),
-            )}</span><div class="game-copy"><p class="game-title" title="${escapeHtml(game.name)}">${escapeHtml(game.name)}</p><p class="game-meta">App ${game.appId} · ${game.steamHoursReported === false ? "Steam hours unavailable" : (game.steamMinutes / 60).toFixed(1) + " Steam hours"}</p></div><div class="game-actions"><button class="text-button" data-action="target" data-app="${game.appId}" title="Set hour target" aria-label="Set hour target for ${escapeHtml(game.name)}">Target</button><input type="checkbox" data-game="${game.appId}" aria-label="Select ${escapeHtml(game.name)}" ${selectedIds.has(game.appId) ? "checked" : ""}></div></div>`,
+            )}</span><div class="game-copy"><p class="game-title" title="${escapeHtml(game.name)}">${escapeHtml(game.name)}</p><p class="game-meta">App ${game.appId} · ${game.steamHoursReported === false ? "Steam hours unavailable" : (game.steamMinutes / 60).toFixed(1) + " Steam hours"}</p></div><div class="game-actions">${window.chrome?.webview ? button("Open in SAM", "desktop-sam-open", false, `data-app="${game.appId}" aria-label="Open ${escapeHtml(game.name)} in SAM"${samOpening ? " disabled" : ""}`) : ""}<button class="text-button" data-action="target" data-app="${game.appId}" title="Set hour target" aria-label="Set hour target for ${escapeHtml(game.name)}">Target</button><input type="checkbox" data-game="${game.appId}" aria-label="Select ${escapeHtml(game.name)}" ${selectedIds.has(game.appId) ? "checked" : ""}></div></div>`,
         )
         .join("") ||
       `<p class="empty-inline">${selected()?.loggedIn ? "No matching owned games. Refresh the library or clear the search." : "Sign in to load your Steam library."}</p>`
@@ -447,7 +450,7 @@ function renderAfk() {
       "Configure private AFK replies and rotating group replies.",
       '<button class="button primary" type="submit" form="afk-form">Save reply settings</button>',
     ) +
-    `<form id="afk-form" class="panel form-panel"><div class="panel-title"><div><h2>Automatic replies</h2><p>Private, group and friend welcome messages wait three seconds before sending. AI generation may add time. Cooldowns still apply.</p></div></div><label class="check-label field"><input name="enabled" type="checkbox" ${afk.enabled ? "checked" : ""}><strong>Enable AFK replies</strong></label>${field('<label for="afk-message">Your reply</label>', `<textarea id="afk-message" name="message" maxlength="500" required>${escapeHtml(afk.message)}</textarea>`)}<div class="field-row">${field('<label for="afk-cooldown">Cooldown per friend (minutes)</label>', `<input id="afk-cooldown" name="cooldown" type="number" min="1" max="1440" required value="${afk.cooldownMinutes}">`)}${field('<label for="excluded-friends">Excluded Steam IDs</label>', `<input id="excluded-friends" name="excluded" value="${escapeHtml(afk.excludedFriends.join(", "))}" placeholder="Comma-separated SteamID64 values">`)}</div><div class="form-section"><h3>Quiet hours</h3><label class="check-label field"><input name="quiet" type="checkbox" ${afk.quietHours.enabled ? "checked" : ""}>Do not reply during quiet hours</label>${field('<label for="quiet-zone">Time zone</label>', zoneSelect("quiet-zone", afk.quietHours.timeZone))}<div class="field-row">${field('<label for="quiet-start">Start</label>', `<input id="quiet-start" name="quiet-start" type="time" value="${afk.quietHours.start}" required>`)}${field('<label for="quiet-end">End</label>', `<input id="quiet-end" name="quiet-end" type="time" value="${afk.quietHours.end}" required>`)}</div></div><div class="form-section"><h3>AI replies · Groq</h3><p class="hint">Selected chat text is sent to Groq when AI is enabled. The last two AI exchanges per chat may be sent as context. They stay only in server memory for 20 minutes and clear on restart. Existing friend/group enable switches, exclusions, quiet hours and cooldowns still apply. Custom replies are used when AI is unavailable. Keep your Groq account on its Free plan; this app cannot inspect or enforce provider billing.</p><label class="check-label field"><input name="ai-private" type="checkbox" ${ui.config.aiReplies?.privateMessages ? "checked" : ""}>Use AI for private AFK replies</label><label class="check-label field"><input name="ai-groups" type="checkbox" ${ui.config.aiReplies?.groups ? "checked" : ""}>Use AI for group replies</label>${field('<label for="ai-instructions">AI instructions</label>', `<textarea id="ai-instructions" name="ai-instructions" maxlength="2000" rows="5" required>${escapeHtml(ui.config.aiReplies?.instructions ?? "Use casual, friendly language. Keep replies to one or two short sentences. Say you are an automated assistant replying while the account owner is away. Do not invent facts about the owner.")}</textarea>`)}<div class="field-row">${field('<label for="ai-daily">AI requests per UTC day for this account</label>', `<input id="ai-daily" name="ai-daily" type="number" min="1" max="500" required value="${ui.config.aiReplies?.dailyLimit ?? 100}">`)}${field('<label for="ai-cooldown">AI cooldown per chat (seconds)</label>', `<input id="ai-cooldown" name="ai-cooldown" type="number" min="2" max="3600" required value="${ui.config.aiReplies?.cooldownSeconds ?? 15}">`)}</div><p class="hint">A shared maximum of 500 requests per UTC day and one request every two seconds applies across accounts, including previews and failed attempts. Faster traffic uses custom replies.</p></div><div class="form-section"><h3>Group auto replies</h3><label class="check-label field"><input name="group-enabled" type="checkbox" ${ui.config.groupReplies?.enabled ? "checked" : ""}>Enable rotating replies in all joined group chats</label><p class="hint">One reply per incoming message: 1 → 2 → 3 → 1, separately in each chat room. Add or join groups in Steam first. Own messages, system notices and old messages are ignored. The sequence resets when HourBoostr restarts. Subscriptions update within 30 seconds.</p>${[0,1,2].map(i => field(`<label for="group-reply-${i}">Group reply ${i+1}</label>`, `<textarea id="group-reply-${i}" name="group-reply-${i}" rows="3" maxlength="500">${escapeHtml(ui.config.groupReplies?.messages?.[i] ?? "")}</textarea>`)).join("")}${field('<label for="group-cooldown">Minimum time between group replies (seconds)</label>', `<input id="group-cooldown" name="group-cooldown" type="number" min="1" max="3600" required value="${ui.config.groupReplies?.cooldownSeconds ?? 5}">`, 'Messages received during the cooldown are skipped without advancing the sequence. Start at 5 seconds to reduce reply loops with other bots. Applies separately to each chat room.')}</div><p class="callout">Cooldowns are shared across message transports. Your own message echoes are ignored. Message contents are not written to the activity log.</p><div class="form-actions"><button class="button primary" type="submit">Save reply settings</button><span id="afk-feedback" class="small-text muted" role="status"></span></div></form>` + `<section class="panel form-panel"><h3>Groq connection · shared across accounts</h3><p id="ai-status" role="status">Loading connection status…</p><p class="hint">Configure Groq on the machine running HourBoostr. The browser does not receive the key.</p><form id="ai-preview-form">${field('<label for="ai-preview">Preview incoming message</label>', '<textarea id="ai-preview" name="message" maxlength="1000" rows="2" required></textarea>')}<button class="button" type="submit">Generate preview · no Steam message sent</button><p class="callout" id="ai-preview-result" role="status">Save reply settings before previewing. A preview uses your request budget.</p></form></section>`;
+    `<form id="afk-form" class="panel form-panel"><div class="panel-title"><div><h2>Automatic replies</h2><p>Private, group and friend welcome messages wait three seconds before sending. AI generation may add time. Cooldowns still apply.</p></div></div><label class="check-label field"><input name="enabled" type="checkbox" ${afk.enabled ? "checked" : ""}><strong>Enable AFK replies</strong></label>${field('<label for="afk-message">Your reply</label>', `<textarea id="afk-message" name="message" maxlength="500" required>${escapeHtml(afk.message)}</textarea>`)}<div class="field-row">${field('<label for="afk-cooldown">Preset cooldown per friend (minutes)</label>', `<input id="afk-cooldown" name="cooldown" type="number" min="1" max="1440" required value="${afk.cooldownMinutes}">`)}${field('<label for="excluded-friends">Excluded Steam IDs</label>', `<input id="excluded-friends" name="excluded" value="${escapeHtml(afk.excludedFriends.join(", "))}" placeholder="Comma-separated SteamID64 values">`)}</div><div class="form-section"><h3>Quiet hours</h3><label class="check-label field"><input name="quiet" type="checkbox" ${afk.quietHours.enabled ? "checked" : ""}>Do not reply during quiet hours</label>${field('<label for="quiet-zone">Time zone</label>', zoneSelect("quiet-zone", afk.quietHours.timeZone))}<div class="field-row">${field('<label for="quiet-start">Start</label>', `<input id="quiet-start" name="quiet-start" type="time" value="${afk.quietHours.start}" required>`)}${field('<label for="quiet-end">End</label>', `<input id="quiet-end" name="quiet-end" type="time" value="${afk.quietHours.end}" required>`)}</div></div><div class="form-section"><h3>AI replies · Groq</h3><p class="hint">Selected chat text is sent to Groq when AI is enabled. Up to 10 recent AI exchanges in the same chat may be sent as context. They stay only in VPS memory for 20 minutes and clear on restart. Existing friend/group enable switches, exclusions, quiet hours and cooldowns still apply. AI chats may use a preset when Groq reports a token limit, or occasionally at random (1% chance, up to twice per account per UTC day). Keep your Groq account on its Free plan; this app cannot inspect or enforce provider billing.</p><label class="check-label field"><input name="ai-private" type="checkbox" ${ui.config.aiReplies?.privateMessages ? "checked" : ""}>Use AI for private AFK replies</label><label class="check-label field"><input name="ai-groups" type="checkbox" ${ui.config.aiReplies?.groups ? "checked" : ""}>Use AI for group replies</label>${field('<label for="ai-instructions">GPT-OSS 20B prompt</label>', `<textarea id="ai-instructions" name="ai-instructions" maxlength="2000" rows="5" required>${escapeHtml(ui.config.aiReplies?.instructions ?? "Use casual, friendly language. Keep replies to one or two short sentences. Say you are an automated assistant replying while the account owner is away. Do not invent facts about the owner.")}</textarea>`)}${field('<label for="ai-qwen-instructions">Qwen 3.8 27B prompt</label>', `<textarea id="ai-qwen-instructions" name="ai-qwen-instructions" maxlength="2000" rows="5" required>${escapeHtml(ui.config.aiReplies?.qwenInstructions ?? ui.config.aiReplies?.instructions ?? "Keep replies casual, short and calm.")}</textarea>`)}<div class="field-row">${field('<label for="ai-daily">AI requests per model per UTC day for this account</label>', `<input id="ai-daily" name="ai-daily" type="number" min="1" max="500" required value="${ui.config.aiReplies?.dailyLimit ?? 100}">`)}${field('<label for="ai-cooldown">AI cooldown per chat (seconds)</label>', `<input id="ai-cooldown" name="ai-cooldown" type="number" min="2" max="3600" required value="${ui.config.aiReplies?.cooldownSeconds ?? 15}">`)}</div><p class="hint">Each model has its own 500-request limit per UTC day across accounts. The shared cooldown still applies, including previews, handoffs and failed attempts. GPT handles normal messages. Qwen can take over for hostility within that conversation. A civil reply or five minutes of inactivity resets the tone. Private AI chats use the AI cooldown for generated replies. Messages that arrive during a reply are grouped into a follow-up. The preset cooldown applies when AI is disabled.</p></div><div class="form-section"><h3>Group auto replies</h3><label class="check-label field"><input name="group-enabled" type="checkbox" ${ui.config.groupReplies?.enabled ? "checked" : ""}>Enable rotating replies in all joined group chats</label><p class="hint">One reply per incoming message: 1 → 2 → 3 → 1, separately in each chat room. Add or join groups in Steam first. Own messages, system notices and old messages are ignored. The sequence resets when HourBoostr restarts. Subscriptions update within 30 seconds.</p>${[0,1,2].map(i => field(`<label for="group-reply-${i}">Group reply ${i+1}</label>`, `<textarea id="group-reply-${i}" name="group-reply-${i}" rows="3" maxlength="500">${escapeHtml(ui.config.groupReplies?.messages?.[i] ?? "")}</textarea>`)).join("")}${field('<label for="group-cooldown">Minimum time between group replies (seconds)</label>', `<input id="group-cooldown" name="group-cooldown" type="number" min="1" max="3600" required value="${ui.config.groupReplies?.cooldownSeconds ?? 5}">`, 'Messages received during the cooldown are skipped without advancing the sequence. Start at 5 seconds to reduce reply loops with other bots. Applies separately to each chat room.')}</div><p class="callout">Cooldowns are shared across message transports. Your own message echoes are ignored. Message contents are not written to the activity log.</p><div class="form-actions"><button class="button primary" type="submit">Save reply settings</button><span id="afk-feedback" class="small-text muted" role="status"></span></div></form>` + `<section class="panel form-panel"><h3>Groq connection · shared across accounts</h3><p id="ai-status" role="status">Loading connection status…</p><div id="ai-token-usage"></div>${button("Refresh token usage", "refresh-ai-usage")}<p class="hint">Groq keys are configured on the VPS over SSH. The app only receives connection status and usage. AI calls run on the VPS. Keep the provider account on its Free plan.</p><form id="ai-preview-form">${field('<label for="ai-preview-model">Start preview with</label>', '<select id="ai-preview-model" name="start-with"><option value="auto">Automatic</option><option value="gpt">GPT-OSS 20B</option><option value="qwen">Qwen 3.8 27B</option></select>')}${field('<label for="ai-preview">Preview incoming message</label>', '<textarea id="ai-preview" name="message" maxlength="1000" rows="2" required></textarea>')}<button class="button" type="submit">Generate preview · no Steam message sent</button><p class="callout" id="ai-preview-result" role="status">Save reply settings before previewing. A preview uses your request budget.</p></form></section>`;
   $("#main").insertAdjacentHTML("beforeend", window.HBRGroupRegulars.card);
   window.HBRGroupRegulars.mount(document.getElementById("group-regulars"), ui.selected);
   $("#main").insertAdjacentHTML("beforeend", window.HBRProfileComments.card);
@@ -458,7 +461,13 @@ async function loadAiStatus() {
   try {
     const data = await api("/api/ai/status");
     const target = $("#ai-status");
-    if (target) target.textContent = `${data.configured ? "Key saved" : "No key saved"} · ${data.model} · ${data.requestsToday}/${data.globalDailyLimit} requests today (UTC) · ${data.status}`;
+    if (target) target.textContent = `GPT-OSS 20B ${(data.gptConfigured ?? data.configured) ? "key saved" : "unconfigured"} · Qwen ${data.qwenConfigured ? "key saved" : "unconfigured"} · ${data.requestBudgets ? `GPT ${data.requestBudgets.gpt}/${data.requestBudgets.limit}, Qwen ${data.requestBudgets.qwen}/${data.requestBudgets.limit} daily budget used (UTC)${data.requestBudgets.legacy ? ` (${data.requestBudgets.legacy} earlier requests count toward both caps)` : ""}` : `${data.requestsToday}/${data.globalDailyLimit} requests today`}`;
+    const usage = $("#ai-token-usage");
+    if (usage && data.tokens) {
+      const count = (value) => Number(value ?? 0).toLocaleString();
+      const card = (name, totals) => `<div class="stat-card"><p class="label">${name}</p><div class="stat-value">${count(totals.totalTokens)}</div><p class="stat-footnote">${count(totals.inputTokens)} input · ${count(totals.outputTokens)} output</p></div>`;
+      usage.innerHTML = `<h4>Tokens used today · UTC</h4><div class="field-row">${card("GPT-OSS 20B", data.tokens.gpt)}${card("Qwen 3.8 27B", data.tokens.qwen)}</div><p class="hint">Tokens reported by Groq for HourBoostr requests. The counters start with this update and reset at midnight UTC.</p>`;
+    }
   } catch (error) { const target = $("#ai-status"); if (target) target.textContent = error.message; }
 }
 
@@ -502,12 +511,20 @@ function renderStatistics() {
     }</tbody></table></div><p class="hint">Targets use the estimated total and stop further idling for that game. Steam’s reported hours may update later.</p></section>`;
 }
 let desktopState = { startup: false, minimizeOnClose: true };
+let samOpening = false;
 function desktopPanel() {
   if (!window.chrome?.webview) return `<section class="panel form-panel"><h2>Windows startup and tray</h2><p class="muted small-text">Open HourBoostr.Desktop.exe from the Windows package to use startup and tray controls. Startup opens directly in the tray.</p></section>`;
   return `<section class="panel form-panel"><h2>Windows startup and tray</h2><label class="check-label"><input id="desktop-startup" type="checkbox" ${desktopState.startup ? "checked" : ""}>Start with Windows</label><p class="hint">Starts when you sign into Windows, directly in the system tray.</p><label class="check-label"><input id="desktop-close-to-tray" type="checkbox" ${desktopState.minimizeOnClose ? "checked" : ""}>Close window to tray</label><p class="hint">Keep Steam sessions running when you close the window. Choose Exit from the tray menu to stop the app. These preferences save immediately.</p><div class="form-actions">${button("Minimize to tray", "desktop-minimize")}</div></section>`;
 }
 if (window.chrome?.webview) {
   window.chrome.webview.addEventListener("message", ({ data }) => {
+    if (data?.type === "desktop-sam") {
+      samOpening = false;
+      document.querySelectorAll('[data-action="desktop-sam-open"]').forEach(button => { button.disabled = false; });
+      if (data.error) toast(data.error);
+      else if (data.opened) toast("Opened Steam Achievement Manager.");
+      return;
+    }
     if (data?.type !== "desktop-state") return;
     desktopState = data;
     if ($("#desktop-startup")) $("#desktop-startup").checked = data.startup;
@@ -556,13 +573,35 @@ function updateAppearancePreview() {
     : presenceStates[status] + (badge === "normal" ? "" : " · " + presenceBadges[badge]);
 }
 
+function renderAutoJoin(config, account) {
+  const options = config.autoJoinGroups ?? {};
+  const check = (name, label, enabled) =>
+    `<label class="check-label"><input name="group-join-${name}" type="checkbox" ${enabled ? "checked" : ""}>${label}</label>`;
+  const recent = (account?.groupJoinActivity ?? []).slice().reverse();
+  return `<fieldset class="stack">
+    <legend>Auto-Join Steam Groups</legend>
+    ${check("enabled", "Enable automatic group joining", options.enabled)}
+    ${check("direct", "Accept direct Steam group invitations", options.directInvites ?? true)}
+    ${check("group", "Join from links in group chats", options.groupLinks ?? true)}
+    ${check("private", "Join from links in private messages", options.privateLinks ?? true)}
+    ${check("smart", "Use Groq to interpret references to recent links", options.smartDetection)}
+    ${field('<label for="group-join-limit">Daily join attempt limit</label>',
+      `<input id="group-join-limit" name="group-join-limit" type="number" min="1" max="25" required value="${escapeHtml(options.dailyLimit ?? 5)}">`,
+      "The limit resets at midnight UTC. Explicit links and invitations work without Groq. Steam controls membership and access.")}
+    <details>
+      <summary>Recent join activity</summary>
+      ${recent.length ? `<ul>${recent.map(item => `<li><time datetime="${escapeHtml(item.at)}">${escapeHtml(new Date(item.at).toLocaleString())}</time> · ${escapeHtml(item.source)} · ${escapeHtml(item.result)}</li>`).join("")}</ul>` : '<p class="muted">No group join activity yet.</p>'}
+    </details>
+  </fieldset>`;
+}
+
 function renderSettings() {
   $("#main").innerHTML =
     heading(
       "Your installation, your choices.",
       "Manage account settings, releases, and local access.",
     ) +
-    `<div class="stack"><section class="panel form-panel"><div class="panel-title"><div><h2>Account settings</h2><p>Session credentials are stored separately from ordinary configuration.</p></div></div>${ui.config ? `<form id="account-form">${field('<label for="account-label">Account label</label>', `<input id="account-label" name="label" maxlength="80" required value="${escapeHtml(ui.config.label)}">`)}${renderAppearance(ui.config)}<label class="check-label"><input name="enabled" type="checkbox" ${ui.config.enabled ? "checked" : ""}>Enable this account</label><label class="check-label"><input name="auto-accept-friends" type="checkbox" ${ui.config.autoAcceptFriendRequests ? "checked" : ""}>Automatically accept incoming friend requests</label><p class="hint">Accept pending and new requests from individual Steam accounts. Idling always respects Steam’s playing-elsewhere lock.</p><label class="check-label"><input name="friend-welcome-enabled" type="checkbox" ${ui.config.friendWelcomeEnabled ? "checked" : ""}>Send a welcome message after automatic acceptance</label>${field('<label for="friend-welcome-message">Friend welcome message</label>', `<textarea id="friend-welcome-message" name="friend-welcome-message" maxlength="500" rows="3">${escapeHtml(ui.config.friendWelcomeMessage ?? "Thanks for adding me! I am AFK right now and will respond later.")}</textarea>`, "Requires automatic friend acceptance. Waits three seconds, then sends once per Steam friend after successful acceptance. Existing friends are not messaged. Delivery failures are logged without automatic retries.")}<div class="form-actions"><button class="button primary" type="submit">Save account</button>${button("Forget saved session", "forget")}${button("Remove account", "remove", false, 'data-tone="danger"')}</div></form>` : '<p class="muted">Add an account to configure its settings.</p>'}</section><section class="panel form-panel"><div class="panel-title"><div><h2>Releases and updates</h2><p>Current version: ${escapeHtml(ui.data.version)}</p></div></div><form id="release-form">${field('<label for="release-repo">Remaster release repository</label>', '<input id="release-repo" name="repository" placeholder="owner/HourBoostr-Remastered">', "Set this after the remaster is published. Updates are checked only when you ask.")}<div class="button-row"><button class="button" type="submit">Save release source</button>${button("Check for updates", "check-updates")}</div></form><p id="update-result" class="callout" role="status">No update check has run.</p><p class="hint">The CLI verifies SHA-256 checksums before staging an update. Apply and rollback operate on stopped, managed release directories.</p></section>${desktopPanel()}<section class="panel form-panel"><h2>About HourBoostr Remastered by Otter</h2><p class="muted small-text">Created by Otter as a continuation of Ezzpify’s HourBoostr, distributed under GPL-3.0. <a href="https://steamcommunity.com/id/pornhub_sex5/" target="_blank" rel="noopener noreferrer">Otter’s Steam profile</a>. Steam decides playtime accounting and profile presence. Hosting availability and uninterrupted account access are not guaranteed.</p></section></div>`;
+    `<div class="stack"><section class="panel form-panel"><div class="panel-title"><div><h2>Account settings</h2><p>Session credentials are stored separately from ordinary configuration.</p></div></div>${ui.config ? `<form id="account-form">${field('<label for="account-label">Account label</label>', `<input id="account-label" name="label" maxlength="80" required value="${escapeHtml(ui.config.label)}">`)}${renderAppearance(ui.config)}<label class="check-label"><input name="enabled" type="checkbox" ${ui.config.enabled ? "checked" : ""}>Enable this account</label><label class="check-label"><input name="auto-accept-friends" type="checkbox" ${ui.config.autoAcceptFriendRequests ? "checked" : ""}>Automatically accept incoming friend requests</label><p class="hint">Accept pending and new requests from individual Steam accounts. Idling always respects Steam’s playing-elsewhere lock.</p><label class="check-label"><input name="friend-welcome-enabled" type="checkbox" ${ui.config.friendWelcomeEnabled ? "checked" : ""}>Send a welcome message after automatic acceptance</label>${field('<label for="friend-welcome-message">Friend welcome message</label>', `<textarea id="friend-welcome-message" name="friend-welcome-message" maxlength="500" rows="3">${escapeHtml(ui.config.friendWelcomeMessage ?? "Thanks for adding me! I am AFK right now and will respond later.")}</textarea>`, "Requires automatic friend acceptance. Waits three seconds, then sends once per Steam friend after successful acceptance. Existing friends are not messaged. Delivery failures are logged without automatic retries.")}${renderAutoJoin(ui.config, ui.data.accounts.find(account => account.id === ui.selected))}<div class="form-actions"><button class="button primary" type="submit">Save account</button>${button("Forget saved session", "forget")}${button("Remove account", "remove", false, 'data-tone="danger"')}</div></form>` : '<p class="muted">Add an account to configure its settings.</p>'}</section><section class="panel form-panel"><div class="panel-title"><div><h2>Releases and updates</h2><p>Current version: ${escapeHtml(ui.data.version)}</p></div></div><form id="release-form">${field('<label for="release-repo">Remaster release repository</label>', '<input id="release-repo" name="repository" placeholder="owner/HourBoostr-Remastered">', "Set this after the remaster is published. Updates are checked only when you ask.")}<div class="button-row"><button class="button" type="submit">Save release source</button>${button("Check for updates", "check-updates")}</div></form><p id="update-result" class="callout" role="status">No update check has run.</p><p class="hint">The CLI verifies SHA-256 checksums before staging an update. Apply and rollback operate on stopped, managed release directories.</p></section>${desktopPanel()}<section class="panel form-panel"><h2>About HourBoostr Remastered by Otter</h2><p class="muted small-text">Created by Otter as a continuation of Ezzpify’s HourBoostr, distributed under GPL-3.0. <a href="https://steamcommunity.com/id/pornhub_sex5/" target="_blank" rel="noopener noreferrer">Otter’s Steam profile</a>. Steam decides playtime accounting and profile presence. Hosting availability and uninterrupted account access are not guaranteed.</p></section></div>`;
 }
 
 function openLogin() {
@@ -648,6 +687,7 @@ document.addEventListener("click", async (event) => {
         return;
       ui.dirty = false;
       ui.selected = accountButton.dataset.account;
+      if (ui.tab === "accounts") ui.tab = "overview";
       ui.offset = 0;
       ui.search = "";
       localStorage.setItem("hbr-account", ui.selected);
@@ -670,7 +710,17 @@ document.addEventListener("click", async (event) => {
       await render();
       return;
     }
+    if (name === "desktop-sam-open") {
+      if (!window.chrome?.webview || samOpening) return;
+      const appId = Number(action.dataset.app);
+      if (!ui.selected || !Number.isInteger(appId) || appId <= 0 || appId > 0xffffffff) return;
+      samOpening = true;
+      action.disabled = true;
+      window.chrome.webview.postMessage({ action: name, accountId: ui.selected, appId });
+      return;
+    }
     if (name === "desktop-minimize") return window.chrome?.webview?.postMessage({action: name});
+    if (name === "refresh-ai-usage") return loadAiStatus();
     if (name === "close-dialog") return closeDialog();
     if (name === "add")
       return dialog(
@@ -704,6 +754,7 @@ document.addEventListener("click", async (event) => {
       return;
     }
     if (name === "lock") {
+      if (window.HBRControl?.enabled && window.OtterAndroid) { window.OtterAndroid.postMessage(JSON.stringify({ type: "lock" })); return; }
       await api("/api/session", "DELETE");
       showPairing();
       return;
@@ -892,7 +943,7 @@ document.addEventListener("submit", async (event) => {
       };
       ui.config.aiReplies = {
         privateMessages: form.has("ai-private"), groups: form.has("ai-groups"),
-        instructions: String(form.get("ai-instructions") ?? ""),
+        instructions: String(form.get("ai-instructions") ?? ""), qwenInstructions: String(form.get("ai-qwen-instructions") ?? ""),
         dailyLimit: Number(form.get("ai-daily")), cooldownSeconds: Number(form.get("ai-cooldown")),
       };
       ui.config.groupReplies = {
@@ -905,8 +956,9 @@ document.addEventListener("submit", async (event) => {
     }
     if (event.target.id === "ai-preview-form") {
       $("#ai-preview-result").textContent = "Generating preview…";
-      const data = await api("/api/ai/preview", "POST", { accountId: ui.selected, message: String(form.get("message") ?? "") });
-      $("#ai-preview-result").textContent = data.reply ?? `Custom reply would be used: ${data.details.status}`;
+      const data = await api("/api/ai/preview", "POST", { accountId: ui.selected, message: String(form.get("message") ?? ""), startWith: String(form.get("start-with") ?? "auto") });
+      const model = data.details.lastReplyHandedOff ? "GPT → Qwen" : data.details.lastReplyModel;
+      $("#ai-preview-result").textContent = data.reply ? `${model ?? "Groq"} · ${data.reply}` : `Custom reply would be used. ${data.details.status}`;
       await loadAiStatus();
     }
     if (event.target.id === "account-form") {
@@ -917,6 +969,11 @@ document.addEventListener("submit", async (event) => {
       ui.config.autoAcceptFriendRequests = form.has("auto-accept-friends");
       ui.config.friendWelcomeEnabled = form.has("friend-welcome-enabled");
       ui.config.friendWelcomeMessage = String(form.get("friend-welcome-message") ?? "");
+      ui.config.autoJoinGroups = {
+        enabled: form.has("group-join-enabled"), directInvites: form.has("group-join-direct"),
+        groupLinks: form.has("group-join-group"), privateLinks: form.has("group-join-private"),
+        smartDetection: form.has("group-join-smart"), dailyLimit: Number(form.get("group-join-limit")),
+      };
       await saveConfig();
       toast("Account settings saved.");
       await poll();
@@ -976,7 +1033,7 @@ document.addEventListener("visibilitychange", () => {
   }
   await poll();
   if (ui.paired) await render();
-  setInterval(poll, 2000);
+  setInterval(poll, 5000);
 })();
 
 function markUnsaved(event) {

@@ -55,9 +55,31 @@ public sealed class RulesTests
         Assert.False(gate.TryReserve(2, 1, true, true, settings, now));
         Assert.False(gate.TryReserve(2, 1, false, false, settings, now));
         Assert.True(gate.TryReserve(2, 1, true, false, settings, now));
+        gate.Complete(2, delivered: true);
         Assert.False(gate.TryReserve(2, 1, true, false, settings, now.AddMinutes(9)));
         Assert.True(gate.TryReserve(3, 1, true, false, settings, now.AddMinutes(1)));
         Assert.True(gate.TryReserve(2, 1, true, false, settings, now.AddMinutes(10)));
+    }
+
+    [Fact]
+    public void PrivateAiFollowUpsUseSecondsAndPresetRepliesUseMinutes()
+    {
+        var settings = new AfkSettings { Enabled = true, CooldownMinutes = 10 };
+        var ai = new ReplyGate();
+        var preset = new ReplyGate();
+        var now = DateTimeOffset.UtcNow;
+        Assert.True(ai.TryReserve(2, 1, true, false, settings, now, aiCooldownSeconds: 2));
+        Assert.False(ai.TryReserve(2, 1, true, false, settings, now.AddSeconds(3), aiCooldownSeconds: 2));
+        ai.Complete(2, delivered: true);
+        Assert.False(ai.TryReserve(2, 1, true, false, settings, now.AddSeconds(1), aiCooldownSeconds: 2));
+        Assert.True(ai.TryReserve(2, 1, true, false, settings, now.AddSeconds(3), aiCooldownSeconds: 2));
+        Assert.True(preset.TryReserve(2, 1, true, false, settings, now.AddSeconds(3)));
+        ai.Complete(2, delivered: true);
+        preset.Complete(2, delivered: true);
+        Assert.False(preset.TryReserve(2, 1, true, false, settings, now.AddSeconds(6)));
+        Assert.True(ai.TryReserve(2, 1, true, false, settings, now.AddSeconds(6), aiCooldownSeconds: 2));
+        ai.Complete(2, delivered: false);
+        Assert.True(ai.TryReserve(2, 1, true, false, settings, now.AddSeconds(7), aiCooldownSeconds: 2));
     }
     [Fact]
     public void QuietHoursAndExcludedFriendsBlockReplies()

@@ -19,7 +19,7 @@ public sealed class ConversationMemory
             var turns = Recent(key, now).ToList();
             turns.Add(new("user", input[..Math.Min(input.Length, 1000)])); turns.Add(new("assistant", reply[..Math.Min(reply.Length, 350)]));
             if (chats.Count >= 200 && !chats.ContainsKey(key)) chats.Remove(chats.MinBy(x => x.Value.At).Key);
-            chats[key] = (now, turns.TakeLast(4).ToList());
+            chats[key] = (now, turns.TakeLast(20).ToList());
         }
     }
     public static bool Repeats(IEnumerable<AiChatTurn> turns, string reply)

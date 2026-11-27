@@ -77,9 +77,9 @@ public sealed class ProfileCommentsTests : IDisposable
         var store = new DataStore(root);
         using var client = new HttpClient(new ModerationFixture(modelText));
         var ai = new AiReplyService(store, client);
-        ai.SaveKey("gsk_" + new string('x', 25));
+        ai.SaveKey("gsk_fixture_only_not_a_real_key");
         Assert.Equal(expected, await ai.ScreenCommentAsync(Account, 100, "GG", default));
-        Assert.Equal(1, store.Read<AiReplyUsage>("ai-usage.json")!.Accounts[Account]);
+        Assert.Equal(1, store.Read<AiModelRequestUsage>("ai-usage.json")!.Gpt[Account]);
     }
 
     private sealed class ModerationFixture(string modelText) : HttpMessageHandler

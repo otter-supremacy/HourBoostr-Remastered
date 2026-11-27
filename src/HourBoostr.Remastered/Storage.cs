@@ -43,7 +43,7 @@ public sealed class DataStore
     public void Remove(string id)
     {
         lock (gate) { settings.Accounts.RemoveAll(x => x.Id == id); Write("settings.json", settings); }
-        foreach (var name in new[] { $"statistics-{id}.json", $"session-{id}.secret", $"friend-welcomes-{id}.json", $"group-regulars-{id}.json", $"profile-comments-{id}.json" })
+        foreach (var name in new[] { $"statistics-{id}.json", $"session-{id}.secret", $"friend-welcomes-{id}.json", $"group-regulars-{id}.json", $"group-fallbacks-{id}.json", $"group-auto-join-{id}.json", $"profile-comments-{id}.json" })
         { var path = Resolve(name); if (File.Exists(path)) File.Delete(path); }
     }
     public void SetReleaseRepository(string? repository)

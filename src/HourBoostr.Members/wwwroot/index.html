@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111b24">
+  <meta name="robots" content="noindex, nofollow">
+  <title>HourBoostr Members</title>
+  <link rel="stylesheet" href="/members.css">
+  <script src="/members.js" defer></script>
+  <script src="/member-chat.js" defer></script>
+</head>
+<body>
+  <header><a class="brand" href="/"><span class="mark" aria-hidden="true">H</span> HourBoostr <span>Members</span></a>
+    <nav aria-label="Dashboard" hidden><a href="#overview">Overview</a><a href="#account">Account</a></nav>
+  </header>
+  <main>
+    <p id="notice" role="status" hidden></p>
+    <section id="signin" class="card auth-card" aria-labelledby="auth-title" hidden>
+      <h1 id="auth-title">Welcome back</h1>
+      <p id="auth-intro">Sign in to your HourBoostr dashboard.</p>
+      <form id="password-auth" hidden>
+        <label for="auth-email">Email address</label>
+        <input id="auth-email" type="email" autocomplete="username" maxlength="254" required>
+        <div id="recovery-field" hidden>
+          <label for="auth-recovery">Recovery code</label>
+          <input id="auth-recovery" type="text" spellcheck="false" autocapitalize="characters" autocomplete="off" maxlength="48">
+        </div>
+        <label for="auth-password" id="password-label">Password</label>
+        <div class="password-field">
+          <input id="auth-password" type="password" autocomplete="current-password" maxlength="128" required>
+          <button type="button" id="show-password" aria-controls="auth-password">Show</button>
+        </div>
+        <p class="field-note" id="password-help" hidden>Use at least 15 characters. A passphrase works well.</p>
+        <a id="forgot" class="form-link" href="/reset">Forgot password?</a>
+        <p id="auth-error" role="alert" hidden></p>
+        <button class="button auth-primary" id="auth-submit" type="submit">Log in</button>
+      </form>
+      <p id="switch-auth" class="auth-switch" hidden><span id="switch-copy"></span> <a id="switch-link" href="/signup">Sign up</a></p>
+      <p class="auth-divider" id="auth-divider" hidden><span>or</span></p>
+      <a class="button auth-google" href="/auth/google" id="google" hidden>Continue with Google</a>
+      <p id="public-preview" class="auth-footnote" hidden>Public preview · Simulated Steam. <a href="/privacy">Privacy information</a></p>
+      <p id="closed" hidden>Sign-in is unavailable on this deployment.</p>
+    </section>
+    <section id="save-recovery" class="card auth-card" aria-labelledby="recovery-title" hidden>
+      <h1 id="recovery-title" tabindex="-1">Save your recovery code</h1>
+      <p>Keep this code in your password manager. You’ll need it to reset your password. HourBoostr shows it once.</p>
+      <output id="recovery-value" class="recovery-value" aria-label="Recovery code"></output>
+      <div class="auth-recovery-actions">
+        <button id="copy-recovery" type="button">Copy code</button>
+        <button id="recovery-done" type="button" class="button">I’ve saved it</button>
+      </div>
+      <p id="copy-result" role="status"></p>
+    </section>
+    <section id="overview" hidden>
+      <h1>Overview</h1>
+      <div class="grid">
+        <article class="card"><h2>Current game</h2><p class="value" id="current-game"></p><p id="connection"></p></article>
+        <article class="card"><h2>Estimated time</h2><p class="value" id="estimated"></p><p>Time measured by HourBoostr.</p></article>
+      </div>
+      <button id="play" class="button" type="button">Start idling</button>
+      <a id="setup" href="#account" hidden>Set up your account</a>
+    </section>
+    <section id="account" hidden>
+      <h1>Account</h1>
+      <div class="grid">
+        <article class="card">
+          <h2>Steam</h2>
+          <p id="link-state"></p>
+          <img id="qr" width="180" height="180" alt="Steam Mobile sign-in QR code" hidden>
+          <button id="link" class="button" type="button">Link Steam</button>
+          <button id="unlink" type="button" hidden>Unlink Steam</button>
+          <form id="game" hidden><label for="game-picker">Game to idle</label><select id="game-picker"></select><button type="submit">Save game</button></form>
+        </article>
+        <article class="card"><h2>Website sign-in</h2><p id="email"></p><button id="logout" type="button">Sign out</button></article>
+      </div>
+      <section class="card" aria-labelledby="appearance-title" id="appearance-card">
+        <h2 id="appearance-title">Appearance</h2>
+        <p id="appearance-help">Choose your Friends status, display badge, and custom text.</p>
+        <form id="appearance-form" hidden>
+          <div class="appearance-options">
+            <label for="appearance-status">Friends status
+              <select id="appearance-status" name="status"><option value="online">Online</option><option value="busy">Do Not Disturb</option><option value="away">Away</option><option value="invisible">Invisible</option></select>
+            </label>
+            <label for="appearance-badge">Display badge
+              <select id="appearance-badge" name="badge"><option value="normal">Normal</option><option value="play-together">Play Together</option><option value="mobile">Mobile</option><option value="big-picture">Big Picture</option><option value="vr">VR</option></select>
+            </label>
+          </div>
+          <label for="appearance-custom">Custom status</label>
+          <input id="appearance-custom" name="customText" maxlength="80" aria-describedby="appearance-text-help">
+          <p id="appearance-text-help" class="field-note">Leave blank to show your selected game. Custom text is displayed as a non-Steam title when supported.</p>
+          <div class="appearance-preview" aria-live="polite"><strong>Friends preview</strong><span id="appearance-preview-line"></span><span id="appearance-preview-text"></span></div>
+          <div class="chat-actions"><button type="submit" class="button">Save appearance</button></div>
+        </form>
+        <p id="appearance-result" role="status"></p>
+      </section>
+      <section class="card" aria-labelledby="chat-title" id="chat-settings">
+        <h2 id="chat-title">Steam chat and friend requests</h2>
+        <p id="chat-mode"></p>
+        <form id="chat-form" hidden>
+          <details open>
+            <summary>Private AFK replies</summary>
+            <label><input type="checkbox" name="privateReplies"> Reply to private messages from Steam friends</label>
+            <label for="private-reply">AFK message</label><textarea id="private-reply" name="privateMessage" maxlength="300" rows="2"></textarea>
+            <label for="private-cooldown">Cooldown in minutes</label><input id="private-cooldown" name="privateCooldownMinutes" type="number" min="1" max="1440" required>
+            <label for="excluded-friends">Excluded SteamID64 values (comma separated)</label><textarea id="excluded-friends" name="excludedFriends" rows="2"></textarea>
+            <label><input type="checkbox" name="quietHours"> Use quiet hours</label>
+            <label for="quiet-start">Quiet hours start</label><input id="quiet-start" name="quietStart" type="time" required>
+            <label for="quiet-end">Quiet hours end</label><input id="quiet-end" name="quietEnd" type="time" required>
+            <label for="quiet-zone">Time zone (example: Asia/Kolkata)</label><input id="quiet-zone" name="timeZone" maxlength="80" required>
+          </details>
+          <details>
+            <summary>Group chat replies</summary>
+            <label><input type="checkbox" name="groupReplies"> Reply in joined groups</label>
+            <label for="group-first">First reply</label><textarea id="group-first" name="group1" maxlength="300" rows="2"></textarea>
+            <label for="group-second">Second reply</label><textarea id="group-second" name="group2" maxlength="300" rows="2"></textarea>
+            <label for="group-third">Third reply</label><textarea id="group-third" name="group3" maxlength="300" rows="2"></textarea>
+            <label for="group-cooldown">Cooldown per room in seconds</label><input id="group-cooldown" name="groupCooldownSeconds" type="number" min="5" max="3600" required>
+          </details>
+          <details open>
+            <summary>Friend requests and welcomes</summary>
+            <label><input type="checkbox" name="autoAccept"> Automatically accept incoming friend requests</label>
+            <label><input type="checkbox" name="welcomeEnabled"> Send a welcome after acceptance</label>
+            <label for="welcome-message">Welcome message</label><textarea id="welcome-message" name="welcomeMessage" maxlength="300" rows="2"></textarea>
+          </details>
+          <details>
+            <summary>Optional Groq replies</summary>
+            <p id="groq-status" role="status"></p>
+            <label for="groq-model">Model</label>
+            <select id="groq-model"><option value="gpt">GPT</option><option value="qwen">Qwen</option></select>
+            <label for="groq-key">Your Groq API key</label>
+            <input id="groq-key" type="password" autocomplete="off" maxlength="200">
+            <button type="button" id="save-groq-key">Save key</button>
+            <button type="button" id="remove-groq-key">Remove key</button>
+            <label for="gpt-prompt">GPT reply style</label><textarea id="gpt-prompt" name="gptPrompt" maxlength="1000" rows="2"></textarea>
+            <label for="qwen-prompt">Qwen reply style</label><textarea id="qwen-prompt" name="qwenPrompt" maxlength="1000" rows="2"></textarea>
+            <p>Steam message text is sent to Groq when AI replies are enabled. GPT handles ordinary chat. An optional Qwen key handles direct hostility.</p>
+            <label for="groq-sample">Sample incoming message</label>
+            <input id="groq-sample" maxlength="500">
+            <button type="button" id="groq-preview">Preview AI reply</button>
+            <p id="groq-preview-result" role="status"></p>
+            <label><input type="checkbox" name="aiPrivate"> Use Groq for private replies</label>
+            <label><input type="checkbox" name="aiGroup"> Use Groq for group replies</label>
+          </details>
+          <details id="regulars-panel">
+            <summary>Group Regulars</summary>
+            <p>Choose the groups to watch. People qualify after chatting on three separate UTC days in 14 days and posting the opt-in command. Review each suggestion before sending a friend request.</p>
+            <p id="group-opt-in"></p>
+            <fieldset><legend>Steam groups to watch</legend><div id="regulars-groups"></div></fieldset>
+            <button type="button" id="regulars-refresh">Refresh groups and suggestions</button>
+            <div id="regulars-people" aria-live="polite"></div>
+          </details>
+          <div class="chat-actions">
+            <button class="button" type="submit">Save chat settings</button>
+            <button id="chat-preview" type="button">Preview preset messages</button>
+          </div>
+          <p id="chat-result" role="status"></p>
+          <div id="chat-preview-list" hidden></div>
+        </form>
+      </section>
+    </section>
+    <p id="loading" role="status">Loading dashboard…</p>
+  </main>
+</body>
+</html>
