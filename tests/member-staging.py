@@ -148,26 +148,6 @@ def main(dotnet, assembly):
                 assert call(alice, "/api/member/chat?id=" + b["id"], 200)["settings"]["welcomeMessage"] == "Thanks for the add"
                 assert not call(bob, "/api/member/chat?id=" + a["id"], 200)["settings"]["autoAccept"]
                 call(bob, "/api/member/chat", 400, "PUT", {"privateReplies": True, "privateMessage": "Test", "aiPrivate": True})
-                key_path = "/api/member/chat/key/"
-                fixture_key = "gsk_" + "f" * 28
-                call(stranger, key_path + "gpt", 401, "PUT", {"key": fixture_key})
-                call(alice, key_path + "gpt", 403, "PUT", {"key": fixture_key}, {**HEADERS, "Origin": "https://other.example"})
-                call(alice, key_path + "invalid", 400, "PUT", {"key": fixture_key})
-                call(alice, key_path + "gpt", 204, "PUT", {"key": fixture_key})
-                call(alice, key_path + "qwen", 204, "PUT", {"key": fixture_key})
-                ai = call(alice, "/api/member/chat", 200)
-                assert ai["aiConfigured"] and ai["qwenConfigured"] and fixture_key not in str(ai)
-                assert not call(bob, "/api/member/chat?id=" + a["id"], 200)["aiConfigured"]
-                import sqlite3
-                from contextlib import closing
-                with closing(sqlite3.connect(data / "members.sqlite")) as db:
-                    secrets = db.execute("SELECT secret FROM member_ai_key").fetchall()
-                    assert len(secrets) == 2 and all(fixture_key not in row[0] for row in secrets)
-                    assert secrets[0] != secrets[1]
-                call(bob, "/api/member/chat/preview", 409, "POST", {"message": "Hi"})
-                call(alice, "/api/member/chat/preview", 400, "POST", {"message": ""})
-                call(alice, key_path + "gpt", 204, "DELETE")
-                assert not call(alice, "/api/member/chat", 200)["aiConfigured"]
                 assert call(alice, "/api/member/chat/regulars", 200)["groups"][0]["id"] == "10001"
                 call(alice, "/api/member/chat/regulars/approve", 409, "POST", {"steamId": "76561198000000000"})
                 call(alice, "/api/member/chat", 403, "PUT", settings, {**HEADERS, "Origin": "https://other.example"})
@@ -222,6 +202,29 @@ def main(dotnet, assembly):
                 with contextlib.closing(sqlite3.connect(data / "members.backup.sqlite")) as backup:
                     assert backup.execute("PRAGMA integrity_check").fetchone() == ("ok",)
                     assert backup.execute("SELECT count(*) FROM members WHERE banned=1").fetchone() == (2,)
+                temporary = browser()
+                call(temporary, "/auth/test/key-owner", 204, "POST")
+                account = call(temporary, "/api/member/me", 200)
+                key_path = "/api/member/chat/key/"
+                fixture_key = "gsk_" + "f" * 28
+                call(stranger, key_path + "gpt", 401, "PUT", {"key": fixture_key})
+                call(temporary, key_path + "gpt", 403, "PUT", {"key": fixture_key}, {**HEADERS, "Origin": "https://other.example"})
+                call(temporary, key_path + "invalid", 400, "PUT", {"key": fixture_key})
+                call(temporary, key_path + "gpt", 204, "PUT", {"key": fixture_key})
+                call(temporary, key_path + "qwen", 204, "PUT", {"key": fixture_key})
+                ai = call(temporary, "/api/member/chat", 200)
+                assert ai["aiConfigured"] and ai["qwenConfigured"] and fixture_key not in str(ai)
+                assert not call(alice, "/api/member/chat?id=" + account["id"], 200)["aiConfigured"]
+                import sqlite3
+                from contextlib import closing
+                with closing(sqlite3.connect(data / "members.sqlite")) as db:
+                    secrets = db.execute("SELECT secret FROM member_ai_key").fetchall()
+                    assert len(secrets) == 2 and all(fixture_key not in row[0] for row in secrets)
+                    assert secrets[0] != secrets[1]
+                call(alice, "/api/member/chat/preview", 409, "POST", {"message": "Hi"})
+                call(temporary, "/api/member/chat/preview", 400, "POST", {"message": ""})
+                call(temporary, key_path + "gpt", 204, "DELETE")
+                assert not call(temporary, "/api/member/chat", 200)["aiConfigured"]
             finally:
                 process.terminate()
                 process.wait(timeout=10)
