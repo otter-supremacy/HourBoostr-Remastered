@@ -30,3 +30,18 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - run: docker build -t hourboostr-remastered:ci .
       - run: python3 tests/container-smoke.py
+  members:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: "10.0.402"
+      - name: Build Members
+        run: |
+          dotnet restore src/HourBoostr.Members/HourBoostr.Members.csproj --locked-mode
+          dotnet build src/HourBoostr.Members/HourBoostr.Members.csproj -c Release --no-restore
+      - name: Test Members API and account isolation
+        run: python3 tests/member-staging.py dotnet src/HourBoostr.Members/bin/Release/net10.0/HourBoostr.Members.dll
+      - name: Test Pages gateway
+        run: node --test website/members-edge/worker.test.mjs

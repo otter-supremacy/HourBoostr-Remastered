@@ -16,6 +16,6 @@ Open **AFK replies** for the selected Steam account. Group replies, Group Regula
 
 **Play Together**, **Mobile**, **Big Picture**, and **VR** request display flags. Steam and the viewing client decide what appears. The appearance preview shows the local request. This feature is available in the current source build. The hosted Members demo uses simulated Steam. [Custom Steam status guide](https://hourboostr.pages.dev/guides/custom-steam-status/).
 
-Groq is optional and off for chat replies by default. Configure it on the machine running HourBoostr with the `ai-key` command, which reads the value from standard input. Use the same data directory as the running instance. The dashboard displays connection status and a preview that does not send a Steam message. Eligible text goes to Groq when you enable the relevant feature. The browser does not receive the credential.
+Groq is optional and off for chat replies by default. Self-hosted installations use `ai-key` for GPT and `ai-qwen-key` for Qwen. Hosted Members save their own keys under **Optional Groq replies**. See the [chatbot setup tutorial](TUTORIAL.md#configure-the-ai-chatbot) for key entry, reply settings, and previews.
 
 Profile comment checks share the configured account and global Groq request budgets with chat replies. If screening is unavailable, eligible text appears as **Needs review**. The inbox shows up to 40 recent entries for seven days. **Pause and clear inbox** removes the saved entries and stops monitoring.

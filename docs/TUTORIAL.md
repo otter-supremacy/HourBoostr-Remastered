@@ -131,6 +131,44 @@ Replies are limited to incoming private messages from existing friends. The app 
 
 Blocked users, groups, existing friends, and outgoing requests do not qualify. A successful Steam response appears in activity logs without the other user's identity. Live acceptance still needs an incoming-request test in this preview. See [friend-request details](FRIEND-REQUESTS.md).
 
+## Configure the AI chatbot
+
+Create your key under **API Keys → Create API Key** in the Groq Console. Use a key from your own Groq project. For Qwen, you can create a separate key and select it during setup. Keep keys out of issues, screenshots, chat, and shell command arguments. [Groq Console API keys](https://console.groq.com/keys)
+
+### Self-hosted HourBoostr
+
+Use a build that includes **Groq connection** in **AFK replies**. Run the key commands on the machine hosting HourBoostr, under the same operating-system user and with the same `--data-dir` as the worker. Use the data paths below only if they match your install. Omit the option if the worker uses the default.
+
+1. Save your GPT key. Enter it at the masked prompt. Run the optional second line to configure Qwen.
+
+   **Windows (PowerShell 7+)**
+
+   ```powershell
+   Read-Host "Groq GPT key" -MaskInput | .\HourBoostr.Remastered.exe ai-key --data-dir 'C:\HourBoostrData'
+   Read-Host "Groq Qwen key" -MaskInput | .\HourBoostr.Remastered.exe ai-qwen-key --data-dir 'C:\HourBoostrData'
+   ```
+
+   **Linux (Bash)**
+
+   ```bash
+   (read -rsp 'Groq GPT key: ' key; printf '\n' >&2; printf '%s\n' "$key" | ./HourBoostr.Remastered ai-key --data-dir "$HOME/hourboostr-data")
+   (read -rsp 'Groq Qwen key: ' key; printf '\n' >&2; printf '%s\n' "$key" | ./HourBoostr.Remastered ai-qwen-key --data-dir "$HOME/hourboostr-data")
+   ```
+
+2. Select the Steam account, open **AFK replies**, and check **Groq connection**. Enable private or group replies first, then turn on the corresponding **Use AI** option.
+3. Edit the GPT and Qwen prompts if desired, set the per-model daily request limit and cooldown, then select **Save reply settings**. GPT handles normal chat. HourBoostr can route hostile messages to Qwen within that conversation.
+4. Under **Groq connection**, set **Start preview with** to **Automatic**, **GPT-OSS 20B**, or **Qwen 3.8 27B** and enter a sample incoming message. Select **Generate preview**. A preview consumes an AI request and sends no Steam message.
+5. To remove a saved key, run `ai-key --remove` or `ai-qwen-key --remove` with the same executable and data directory.
+
+### Hosted Members
+
+1. Sign in to the [Members dashboard](https://hourboostr.pages.dev/dashboard) and open **Account → Optional Groq replies**.
+2. Select **GPT**, paste your own key in **Your Groq API key**, and select **Save key**. To configure Qwen, select **Qwen** and repeat with your Qwen key. Use **Remove key** to delete the key for the selected model.
+3. Enter your preferred GPT and Qwen reply styles. Turn on the private or group reply option and its matching **Use Groq** checkbox, then select **Save chat settings**.
+4. Enter a sample under **Optional Groq replies** and select **Preview AI reply**. The public site currently simulates Steam. Previews call Groq using your saved key. Sending automatic Steam replies requires a live Steam worker.
+
+When AI replies are enabled, eligible message text goes to Groq. The app tracks request budgets per model and resets them at midnight UTC. Groq also applies its own service limits. [Groq rate limits](https://console.groq.com/docs/rate-limits)
+
 ## Statistics and diagnostics
 
 ![Statistics view; illustrative demo data](screenshots/statistics.png)
