@@ -202,8 +202,9 @@ def main(dotnet, assembly):
                 with contextlib.closing(sqlite3.connect(data / "members.backup.sqlite")) as backup:
                     assert backup.execute("PRAGMA integrity_check").fetchone() == ("ok",)
                     assert backup.execute("SELECT count(*) FROM members WHERE banned=1").fetchone() == (2,)
-                temporary = browser()
-                call(temporary, "/auth/test/key-owner", 204, "POST")
+                admin(sock, f"members/{b['id']}/unban", 204, device)
+                temporary = bob
+                call(temporary, "/auth/test/bob", 204, "POST")
                 account = call(temporary, "/api/member/me", 200)
                 key_path = "/api/member/chat/key/"
                 fixture_key = "gsk_" + "f" * 28
